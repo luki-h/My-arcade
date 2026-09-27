@@ -189,6 +189,42 @@
       <p>Time your shot and beat the goalkeeper.</p>
       <button data-game="penalty">Play</button>
     </div>
+    <div class="card">
+      <div class="icon">🟦</div>
+      <h2>Block Drop</h2>
+      <p>Rotate falling blocks and clear full lines.</p>
+      <button data-game="tetris">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">🔢</div>
+      <h2>2048</h2>
+      <p>Slide and merge number tiles to reach 2048.</p>
+      <button data-game="2048">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">🟧</div>
+      <h2>Brick Breaker</h2>
+      <p>Bounce the ball and smash every brick.</p>
+      <button data-game="breakout">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">💣</div>
+      <h2>Minesweeper</h2>
+      <p>Clear the field without digging up a mine.</p>
+      <button data-game="mines">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">❌</div>
+      <h2>Tic-Tac-Toe</h2>
+      <p>Get three in a row before the computer does.</p>
+      <button data-game="ttt">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">🦖</div>
+      <h2>Dino Run</h2>
+      <p>Jump over cacti and duck under birds.</p>
+      <button data-game="dino">Play</button>
+    </div>
   </div>
   <a href="index.html">← Back to home</a>
 </section>
@@ -447,7 +483,7 @@ addEventListener("keydown", e => {
   if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
   if (e.code === "Escape" && race) quitRace();
   if (e.code === "KeyR" && race && !e.repeat) startRace();
-  if (mini && !e.repeat) miniKey(e.code);
+  if (mini && (!e.repeat || mini.game.repeatKeys)) miniKey(e.code, e.repeat);
 });
 addEventListener("keyup", e => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
@@ -850,6 +886,22 @@ let bests = {};
 try { bests = JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch (e) {}
 const saveBests = () => { try { localStorage.setItem(BEST_KEY, JSON.stringify(bests)); } catch (e) {} };
 const randInt = n => Math.floor(Math.random() * n);
+const shuffle = a => {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = randInt(i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+// Move a keyboard cursor around a grid of cells with arrows / WASD
+function gridMove(cursor, code, cols, rows) {
+  const d = {
+    ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0],
+    ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1],
+  }[code];
+  if (!d) return cursor;
+  return clamp(Math.floor(cursor / cols) + d[1], 0, rows - 1) * cols + clamp(cursor % cols + d[0], 0, cols - 1);
+}
 
 // Space Dodge: slide left/right, don't get hit by asteroids
 const dodge = {
@@ -1262,11 +1314,7 @@ const memory = {
     this.deal();
   },
   deal() {
-    const f = [...this.faces, ...this.faces];
-    for (let i = f.length - 1; i > 0; i--) {
-      const j = randInt(i + 1);
-      [f[i], f[j]] = [f[j], f[i]];
-    }
+    const f = shuffle([...this.faces, ...this.faces]);
     this.cards = f.map(face => ({ face, up: false, done: false }));
     this.open = [];
     this.hide = 0;
@@ -1288,12 +1336,7 @@ const memory = {
     }
   },
   key(code) {
-    const move = { ArrowLeft: -1, KeyA: -1, ArrowRight: 1, KeyD: 1, ArrowUp: -4, KeyW: -4, ArrowDown: 4, KeyS: 4 }[code];
-    if (move) {
-      const col = this.cursor % 4 + (Math.abs(move) === 1 ? move : 0);
-      const row = Math.floor(this.cursor / 4) + (Math.abs(move) === 4 ? move / 4 : 0);
-      this.cursor = clamp(row, 0, 3) * 4 + clamp(col, 0, 3);
-    }
+    this.cursor = gridMove(this.cursor, code, 4, 4);
     if (code === "Space" || code === "Enter") this.flip(this.cursor);
   },
   tap(x, y) {
@@ -1610,7 +1653,737 @@ const penalty = {
   },
 };
 
-const GAMES = { dodge, stack, snake, pong, flappy, memory, invaders, penalty };
+// Block Drop: falling-blocks puzzle, clear full lines
+const PIECES = {
+  I: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]],
+  O: [[1, 1], [1, 1]],
+  T: [[0, 1, 0], [1, 1, 1], [0, 0, 0]],
+  S: [[0, 1, 1], [1, 1, 0], [0, 0, 0]],
+  Z: [[1, 1, 0], [0, 1, 1], [0, 0, 0]],
+  J: [[1, 0, 0], [1, 1, 1], [0, 0, 0]],
+  L: [[0, 0, 1], [1, 1, 1], [0, 0, 0]],
+};
+const PIECE_COLORS = { I: "#1fd6d6", O: "#ffd21f", T: "#b057ff", S: "#2ecc71", Z: "#ff3b3b", J: "#2f8cff", L: "#ff8c1a" };
+
+const tetris = {
+  id: "tetris", title: "🟦 Block Drop", w: 420, h: 560, cols: 10, rows: 20, cs: 28, repeatKeys: true,
+  controls: "← / → move · ↑ rotate · ↓ soft drop · Space hard drop",
+  reset() {
+    this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
+    this.bag = [];
+    this.next = this.take();
+    this.score = 0;
+    this.lines = 0;
+    this.fall = 0;
+    this.over = false;
+    this.spawn();
+  },
+  // "Bag" randomizer: every piece shows up once per 7 before any repeats
+  take() {
+    if (!this.bag.length) this.bag = shuffle(Object.keys(PIECES));
+    return this.bag.pop();
+  },
+  spawn() {
+    const t = this.next;
+    this.next = this.take();
+    const m = PIECES[t].map(r => [...r]);
+    this.p = { t, m, x: Math.floor((this.cols - m[0].length) / 2), y: t === "I" ? -1 : 0 };
+    if (this.hits(m, this.p.x, this.p.y)) this.over = true;
+  },
+  hits(m, x, y) {
+    for (let r = 0; r < m.length; r++) {
+      for (let c = 0; c < m[r].length; c++) {
+        if (!m[r][c]) continue;
+        const gx = x + c, gy = y + r;
+        if (gx < 0 || gx >= this.cols || gy >= this.rows) return true;
+        if (gy >= 0 && this.grid[gy][gx]) return true;
+      }
+    }
+    return false;
+  },
+  move(dx, dy) {
+    if (this.hits(this.p.m, this.p.x + dx, this.p.y + dy)) return false;
+    this.p.x += dx;
+    this.p.y += dy;
+    return true;
+  },
+  rotate() {
+    const m = this.p.m;
+    const r = m[0].map((_, i) => m.map(row => row[i]).reverse());
+    // Nudge sideways if rotating into a wall
+    for (const k of [0, -1, 1, -2, 2]) {
+      if (!this.hits(r, this.p.x + k, this.p.y)) { this.p.m = r; this.p.x += k; return; }
+    }
+  },
+  level() { return 1 + Math.floor(this.lines / 10); },
+  lock() {
+    const { m, x, y, t } = this.p;
+    for (let r = 0; r < m.length; r++) {
+      for (let c = 0; c < m[r].length; c++) {
+        if (!m[r][c]) continue;
+        if (y + r < 0) { this.over = true; return; }
+        this.grid[y + r][x + c] = t;
+      }
+    }
+    this.grid = this.grid.filter(row => row.some(v => !v));
+    const cleared = this.rows - this.grid.length;
+    while (this.grid.length < this.rows) this.grid.unshift(Array(this.cols).fill(null));
+    if (cleared) {
+      this.score += [0, 100, 300, 500, 800][cleared] * this.level();
+      this.lines += cleared;
+    }
+    this.spawn();
+  },
+  key(code, repeat) {
+    if (code === "ArrowLeft" || code === "KeyA") this.move(-1, 0);
+    else if (code === "ArrowRight" || code === "KeyD") this.move(1, 0);
+    else if (code === "ArrowDown" || code === "KeyS") { if (this.move(0, 1)) this.score++; this.fall = 0; }
+    else if (repeat) return;
+    else if (code === "ArrowUp" || code === "KeyW") this.rotate();
+    else if (code === "Space") {
+      while (this.move(0, 1)) this.score += 2;
+      this.lock();
+    }
+  },
+  update(dt) {
+    if (this.over) return false;
+    this.fall += dt;
+    if (this.fall >= Math.max(0.08, 0.8 - (this.level() - 1) * 0.07)) {
+      this.fall = 0;
+      if (!this.move(0, 1)) this.lock();
+    }
+    return !this.over;
+  },
+  cell(c, x, y, color, s = this.cs) {
+    c.fillStyle = color;
+    c.fillRect(x + 1, y + 1, s - 2, s - 2);
+    c.fillStyle = "rgba(255,255,255,0.3)";
+    c.fillRect(x + 1, y + 1, s - 2, 4);
+  },
+  draw(c) {
+    const cs = this.cs, bw = this.cols * cs;
+    c.fillStyle = "#111827";
+    c.fillRect(0, 0, this.w, this.h);
+    c.strokeStyle = "rgba(255,255,255,0.05)";
+    for (let x = 0; x <= bw; x += cs) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, this.h); c.stroke(); }
+    for (let y = 0; y <= this.h; y += cs) { c.beginPath(); c.moveTo(0, y); c.lineTo(bw, y); c.stroke(); }
+
+    this.grid.forEach((row, r) => row.forEach((t, col) => { if (t) this.cell(c, col * cs, r * cs, PIECE_COLORS[t]); }));
+
+    // Ghost shows where the piece will land
+    const { m, x, t } = this.p;
+    let gy = this.p.y;
+    while (!this.hits(m, x, gy + 1)) gy++;
+    m.forEach((row, r) => row.forEach((v, col) => {
+      if (!v) return;
+      c.strokeStyle = "rgba(255,255,255,0.35)";
+      c.strokeRect((x + col) * cs + 2, (gy + r) * cs + 2, cs - 4, cs - 4);
+      if (this.p.y + r >= 0) this.cell(c, (x + col) * cs, (this.p.y + r) * cs, PIECE_COLORS[t]);
+    }));
+
+    // Side panel
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(bw, 0, this.w - bw, this.h);
+    c.fillStyle = "#fff";
+    c.textAlign = "center";
+    c.font = "bold 16px system-ui, sans-serif";
+    const px = bw + (this.w - bw) / 2;
+    c.fillText("NEXT", px, 36);
+    const nm = PIECES[this.next], s = 20;
+    nm.forEach((row, r) => row.forEach((v, col) => {
+      if (v) this.cell(c, px - (nm[0].length * s) / 2 + col * s, 56 + r * s, PIECE_COLORS[this.next], s);
+    }));
+    c.fillText("LINES", px, 180);
+    c.fillText("LEVEL", px, 250);
+    c.font = "bold 26px system-ui, sans-serif";
+    c.fillStyle = "#ffcc00";
+    c.fillText(this.lines, px, 212);
+    c.fillText(this.level(), px, 282);
+  },
+};
+
+// 2048: slide tiles, equal numbers merge
+const TILE_COLORS = {
+  2: "#eee4da", 4: "#ede0c8", 8: "#f2b179", 16: "#f59563", 32: "#f67c5f", 64: "#f65e3b",
+  128: "#edcf72", 256: "#edcc61", 512: "#edc850", 1024: "#edc53f", 2048: "#edc22e",
+};
+const g2048 = {
+  id: "2048", title: "🔢 2048", w: 420, h: 420,
+  controls: "Arrow keys or WASD to slide the tiles · Matching numbers merge",
+  endText: "No more moves!",
+  reset() {
+    this.b = Array(16).fill(0);
+    this.score = 0;
+    this.won = false;
+    this.add();
+    this.add();
+  },
+  add() {
+    const empty = this.b.map((v, i) => (v ? -1 : i)).filter(i => i >= 0);
+    if (empty.length) this.b[empty[randInt(empty.length)]] = Math.random() < 0.9 ? 2 : 4;
+  },
+  // dir: 0 left, 1 right, 2 up, 3 down
+  slide(dir) {
+    let moved = false;
+    for (let i = 0; i < 4; i++) {
+      const idx = [0, 1, 2, 3].map(j => {
+        const k = dir === 0 || dir === 2 ? j : 3 - j;
+        return dir < 2 ? i * 4 + k : k * 4 + i;
+      });
+      const vals = idx.map(k => this.b[k]).filter(v => v);
+      const out = [];
+      for (let j = 0; j < vals.length; j++) {
+        if (vals[j] === vals[j + 1]) {
+          const v = vals[j] * 2;
+          out.push(v);
+          this.score += v;
+          if (v === 2048) this.won = true;
+          j++;
+        } else {
+          out.push(vals[j]);
+        }
+      }
+      while (out.length < 4) out.push(0);
+      idx.forEach((k, j) => {
+        if (this.b[k] !== out[j]) moved = true;
+        this.b[k] = out[j];
+      });
+    }
+    if (moved) this.add();
+  },
+  canMove() {
+    if (this.b.includes(0)) return true;
+    for (let r = 0; r < 4; r++) {
+      for (let col = 0; col < 4; col++) {
+        const v = this.b[r * 4 + col];
+        if ((col < 3 && v === this.b[r * 4 + col + 1]) || (r < 3 && v === this.b[r * 4 + col + 4])) return true;
+      }
+    }
+    return false;
+  },
+  key(code) {
+    const dir = { ArrowLeft: 0, KeyA: 0, ArrowRight: 1, KeyD: 1, ArrowUp: 2, KeyW: 2, ArrowDown: 3, KeyS: 3 }[code];
+    if (dir !== undefined) this.slide(dir);
+  },
+  update() { return this.canMove(); },
+  draw(c) {
+    const pad = 12, s = (this.w - pad * 5) / 4;
+    c.fillStyle = "#bbada0";
+    c.fillRect(0, 0, this.w, this.h);
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    this.b.forEach((v, i) => {
+      const x = pad + (i % 4) * (s + pad), y = pad + Math.floor(i / 4) * (s + pad);
+      c.fillStyle = v ? TILE_COLORS[v] || "#3c3a32" : "#cdc1b4";
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x, y, s, s, 8); else c.rect(x, y, s, s);
+      c.fill();
+      if (v) {
+        c.fillStyle = v <= 4 ? "#776e65" : "#fff";
+        c.font = `bold ${v < 100 ? 44 : v < 1000 ? 36 : 28}px system-ui, sans-serif`;
+        c.fillText(v, x + s / 2, y + s / 2 + 2);
+      }
+    });
+    if (this.won) {
+      c.fillStyle = "rgba(237,194,46,0.9)";
+      c.fillRect(0, this.h - 40, this.w, 40);
+      c.fillStyle = "#fff";
+      c.font = "bold 18px system-ui, sans-serif";
+      c.fillText("🏆 You made 2048! Keep going!", this.w / 2, this.h - 20);
+    }
+    c.textBaseline = "alphabetic";
+  },
+};
+
+// Brick Breaker: bounce the ball off your paddle into the bricks
+const breakout = {
+  id: "breakout", title: "🟧 Brick Breaker", w: 480, h: 600, pw: 80, py: 560,
+  controls: "Mouse or A / D, ← / → to move · Space or click to launch",
+  reset() {
+    this.px = this.w / 2;
+    this.lives = 3;
+    this.score = 0;
+    this.level = 0;
+    this.nextLevel();
+  },
+  nextLevel() {
+    this.level++;
+    this.bricks = [];
+    for (let r = 0; r < 6; r++) {
+      for (let col = 0; col < 8; col++) this.bricks.push({ x: 10 + col * 58, y: 60 + r * 24, w: 54, h: 20, row: r, alive: true });
+    }
+    this.hold();
+  },
+  // Ball sits on the paddle until launched
+  hold() {
+    this.stuck = true;
+    this.bx = this.px;
+    this.by = this.py - 10;
+    this.speed = 300 + this.level * 30;
+  },
+  launch() {
+    if (!this.stuck) return;
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 0.8;
+    this.vx = Math.cos(a);
+    this.vy = Math.sin(a);
+    this.stuck = false;
+  },
+  key(code) { if (["Space", "Enter", "ArrowUp", "KeyW"].includes(code)) this.launch(); },
+  tap() { this.launch(); },
+  pointer(x) { this.px = clamp(x, this.pw / 2, this.w - this.pw / 2); },
+  update(dt) {
+    const mv = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    this.px = clamp(this.px + mv * 420 * dt, this.pw / 2, this.w - this.pw / 2);
+    if (this.stuck) {
+      this.bx = this.px;
+      this.by = this.py - 10;
+      return true;
+    }
+
+    const ox = this.bx, oy = this.by, r = 8;
+    this.bx += this.vx * this.speed * dt;
+    this.by += this.vy * this.speed * dt;
+    if (this.bx < r) { this.bx = r; this.vx = Math.abs(this.vx); }
+    if (this.bx > this.w - r) { this.bx = this.w - r; this.vx = -Math.abs(this.vx); }
+    if (this.by < r) { this.by = r; this.vy = Math.abs(this.vy); }
+
+    // Paddle: where you hit it decides the bounce angle
+    if (this.vy > 0 && this.by + r >= this.py && this.by < this.py + 12 && Math.abs(this.bx - this.px) < this.pw / 2 + r) {
+      const off = clamp((this.bx - this.px) / (this.pw / 2), -1, 1);
+      const a = -Math.PI / 2 + off * 1.1;
+      this.vx = Math.cos(a);
+      this.vy = Math.sin(a);
+      this.by = this.py - r;
+      this.speed = Math.min(this.speed * 1.01, 650);
+    }
+
+    for (const b of this.bricks) {
+      if (!b.alive) continue;
+      if (this.bx + r < b.x || this.bx - r > b.x + b.w || this.by + r < b.y || this.by - r > b.y + b.h) continue;
+      b.alive = false;
+      this.score += (6 - b.row) * 10;
+      // Bounce off the side we came in from
+      if (ox + r <= b.x || ox - r >= b.x + b.w) this.vx = -this.vx; else this.vy = -this.vy;
+      break;
+    }
+
+    if (this.by > this.h + r) {
+      this.lives--;
+      if (this.lives <= 0) return false;
+      this.hold();
+    }
+    if (!this.bricks.some(b => b.alive)) this.nextLevel();
+    return true;
+  },
+  draw(c) {
+    c.fillStyle = "#111827";
+    c.fillRect(0, 0, this.w, this.h);
+    const rowColors = ["#ff3b3b", "#ff8c1a", "#ffd21f", "#2ecc71", "#2f8cff", "#b057ff"];
+    for (const b of this.bricks) {
+      if (!b.alive) continue;
+      c.fillStyle = rowColors[b.row];
+      c.fillRect(b.x, b.y, b.w, b.h);
+      c.fillStyle = "rgba(255,255,255,0.3)";
+      c.fillRect(b.x, b.y, b.w, 4);
+    }
+    c.fillStyle = "#fff";
+    c.fillRect(this.px - this.pw / 2, this.py, this.pw, 12);
+    c.fillStyle = "#ffcc00";
+    c.beginPath(); c.arc(this.bx, this.by, 8, 0, Math.PI * 2); c.fill();
+
+    c.font = "16px system-ui, sans-serif";
+    c.textAlign = "left";
+    c.fillText("❤️".repeat(Math.max(0, this.lives)), 10, 30);
+    c.textAlign = "right";
+    c.fillStyle = "#fff";
+    c.fillText(`Level ${this.level}`, this.w - 10, 30);
+    if (this.stuck) {
+      c.textAlign = "center";
+      c.fillStyle = "#ffcc00";
+      c.fillText("Space or click to launch", this.w / 2, this.py - 40);
+    }
+  },
+};
+
+// Minesweeper: 9×9 with 10 mines; the first dig is always safe
+const mines = {
+  id: "mines", title: "💣 Minesweeper", w: 360, h: 400, n: 9, count: 10, cs: 40, top: 40,
+  controls: "Click to dig · Right-click (or F) to flag · Arrow keys + Space work too",
+  reset() {
+    this.cells = Array.from({ length: this.n * this.n }, () => ({ mine: false, open: false, flag: false, adj: 0 }));
+    this.placed = false;
+    this.t = 0;
+    this.score = 0;
+    this.cursor = 40;
+    this.ending = 0;
+    this.endText = "";
+  },
+  neighbors(i) {
+    const r = Math.floor(i / this.n), col = i % this.n, out = [];
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const rr = r + dr, cc = col + dc;
+        if ((dr || dc) && rr >= 0 && rr < this.n && cc >= 0 && cc < this.n) out.push(rr * this.n + cc);
+      }
+    }
+    return out;
+  },
+  place(safe) {
+    const keepClear = [safe, ...this.neighbors(safe)];
+    let placed = 0;
+    while (placed < this.count) {
+      const i = randInt(this.cells.length);
+      if (this.cells[i].mine || keepClear.includes(i)) continue;
+      this.cells[i].mine = true;
+      placed++;
+    }
+    this.cells.forEach((cell, i) => { cell.adj = this.neighbors(i).filter(j => this.cells[j].mine).length; });
+    this.placed = true;
+  },
+  dig(i) {
+    const cell = this.cells[i];
+    if (this.ending || cell.open || cell.flag) return;
+    if (!this.placed) this.place(i);
+    if (cell.mine) {
+      cell.boom = true;
+      this.cells.forEach(c => { if (c.mine) c.open = true; });
+      this.endText = "💥 Boom!";
+      this.ending = 1;
+      return;
+    }
+    // Flood-fill open all the empty space around a zero
+    const todo = [i];
+    while (todo.length) {
+      const c = this.cells[todo.pop()];
+      if (c.open || c.flag) continue;
+      c.open = true;
+      this.score++;
+      if (c.adj === 0) todo.push(...this.neighbors(this.cells.indexOf(c)));
+    }
+    if (this.cells.every(c => c.mine || c.open)) {
+      this.score += Math.max(0, 300 - Math.floor(this.t));   // speed bonus
+      this.endText = "🏆 Field cleared!";
+      this.ending = 1;
+    }
+  },
+  flag(i) {
+    const cell = this.cells[i];
+    if (!this.ending && !cell.open) cell.flag = !cell.flag;
+  },
+  tap(x, y, alt) {
+    const col = Math.floor(x / this.cs), row = Math.floor((y - this.top) / this.cs);
+    if (col < 0 || col >= this.n || row < 0 || row >= this.n) return;
+    this.cursor = row * this.n + col;
+    if (alt) this.flag(this.cursor); else this.dig(this.cursor);
+  },
+  key(code) {
+    this.cursor = gridMove(this.cursor, code, this.n, this.n);
+    if (code === "Space" || code === "Enter") this.dig(this.cursor);
+    if (code === "KeyF") this.flag(this.cursor);
+  },
+  update(dt) {
+    // Pause a moment on the final board before showing the result
+    if (this.ending) {
+      this.ending -= dt;
+      return this.ending > 0;
+    }
+    this.t += dt;
+    return true;
+  },
+  draw(c) {
+    const cs = this.cs;
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(0, 0, this.w, this.h);
+    c.font = "bold 18px system-ui, sans-serif";
+    c.textBaseline = "middle";
+    c.fillStyle = "#fff";
+    c.textAlign = "left";
+    c.fillText(`💣 ${this.count - this.cells.filter(x => x.flag).length}`, 12, 20);
+    c.textAlign = "right";
+    c.fillText(`⏱ ${Math.floor(this.t)}`, this.w - 12, 20);
+
+    const numColors = ["", "#1f5fbf", "#2e8b57", "#d32f2f", "#512da8", "#8d2b0b", "#00838f", "#222", "#666"];
+    c.textAlign = "center";
+    this.cells.forEach((cell, i) => {
+      const x = (i % this.n) * cs, y = this.top + Math.floor(i / this.n) * cs;
+      if (cell.open) {
+        c.fillStyle = cell.boom ? "#ff3b3b" : "#d9dde8";
+        c.fillRect(x + 1, y + 1, cs - 2, cs - 2);
+        if (cell.mine) {
+          c.font = "22px system-ui, sans-serif";
+          c.fillText("💣", x + cs / 2, y + cs / 2 + 1);
+        } else if (cell.adj) {
+          c.font = "bold 22px system-ui, sans-serif";
+          c.fillStyle = numColors[cell.adj];
+          c.fillText(cell.adj, x + cs / 2, y + cs / 2 + 1);
+        }
+      } else {
+        c.fillStyle = "#7a8cc4";
+        c.fillRect(x + 1, y + 1, cs - 2, cs - 2);
+        c.fillStyle = "rgba(255,255,255,0.25)";
+        c.fillRect(x + 1, y + 1, cs - 2, 4);
+        if (cell.flag) {
+          c.font = "20px system-ui, sans-serif";
+          c.fillText("🚩", x + cs / 2, y + cs / 2 + 1);
+        }
+      }
+      if (i === this.cursor) {
+        c.strokeStyle = "#ffcc00";
+        c.lineWidth = 3;
+        c.strokeRect(x + 2, y + 2, cs - 4, cs - 4);
+      }
+    });
+    c.textBaseline = "alphabetic";
+  },
+};
+
+// Tic-Tac-Toe: rounds against the computer until it beats you
+const LINES3 = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+function ticWinner(b) {
+  for (const l of LINES3) if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return { who: b[l[0]], line: l };
+  return b.every(v => v) ? { who: "draw" } : null;
+}
+const ttt = {
+  id: "ttt", title: "❌ Tic-Tac-Toe", w: 360, h: 400, top: 40, cs: 120,
+  controls: "Click a square (or arrow keys + Space) · You're X · Keep winning until the CPU beats you",
+  endText: "CPU wins!",
+  reset() {
+    this.score = 0;
+    this.draws = 0;
+    this.round = 0;
+    this.cursor = 4;
+    this.newRound();
+  },
+  newRound() {
+    this.round++;
+    this.b = Array(9).fill("");
+    this.turn = this.round % 2 ? "X" : "O";   // take turns going first
+    this.think = 0.5;
+    this.result = null;
+    this.wait = 0;
+  },
+  afterMove() {
+    const r = ticWinner(this.b);
+    if (r) {
+      this.result = r;
+      if (r.who === "X") this.score++;
+      if (r.who === "draw") this.draws++;
+      this.wait = 1.2;
+      return;
+    }
+    this.turn = this.turn === "X" ? "O" : "X";
+    this.think = 0.45;
+  },
+  play(i) {
+    if (this.turn !== "X" || this.result || this.b[i]) return;
+    this.b[i] = "X";
+    this.afterMove();
+  },
+  cpuMove() {
+    const b = this.b, free = b.map((v, i) => (v ? -1 : i)).filter(i => i >= 0);
+    const winsWith = who => free.find(i => {
+      b[i] = who;
+      const w = ticWinner(b)?.who === who;
+      b[i] = "";
+      return w;
+    });
+    let i = winsWith("O");                         // win if possible
+    if (i === undefined) i = winsWith("X");        // otherwise block
+    if (i === undefined || Math.random() < 0.15) { // sometimes it slips up
+      const corners = [0, 2, 6, 8].filter(k => !b[k]);
+      i = !b[4] && Math.random() < 0.7 ? 4
+        : corners.length && Math.random() < 0.7 ? corners[randInt(corners.length)]
+        : free[randInt(free.length)];
+    }
+    b[i] = "O";
+    this.afterMove();
+  },
+  tap(x, y) {
+    const col = Math.floor(x / this.cs), row = Math.floor((y - this.top) / this.cs);
+    if (col < 0 || col > 2 || row < 0 || row > 2) return;
+    this.cursor = row * 3 + col;
+    this.play(this.cursor);
+  },
+  key(code) {
+    this.cursor = gridMove(this.cursor, code, 3, 3);
+    if (code === "Space" || code === "Enter") this.play(this.cursor);
+  },
+  update(dt) {
+    if (this.result) {
+      this.wait -= dt;
+      if (this.wait <= 0) {
+        if (this.result.who === "O") return false;
+        this.newRound();
+      }
+    } else if (this.turn === "O") {
+      this.think -= dt;
+      if (this.think <= 0) this.cpuMove();
+    }
+    return true;
+  },
+  draw(c) {
+    const cs = this.cs, top = this.top;
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(0, 0, this.w, this.h);
+    c.font = "bold 16px system-ui, sans-serif";
+    c.textBaseline = "middle";
+    c.fillStyle = "#fff";
+    c.textAlign = "left";
+    c.fillText(`Wins ${this.score} · Draws ${this.draws}`, 12, 20);
+    c.textAlign = "right";
+    c.fillStyle = "#ffcc00";
+    c.fillText(this.result ? "" : this.turn === "X" ? "Your turn" : "CPU thinking…", this.w - 12, 20);
+
+    c.strokeStyle = "#6c7293";
+    c.lineWidth = 4;
+    c.beginPath();
+    for (let k = 1; k < 3; k++) {
+      c.moveTo(k * cs, top + 10); c.lineTo(k * cs, top + 3 * cs - 10);
+      c.moveTo(10, top + k * cs); c.lineTo(3 * cs - 10, top + k * cs);
+    }
+    c.stroke();
+
+    const center = i => [(i % 3 + 0.5) * cs, top + (Math.floor(i / 3) + 0.5) * cs];
+    c.lineWidth = 10;
+    c.lineCap = "round";
+    this.b.forEach((v, i) => {
+      const [x, y] = center(i);
+      if (v === "X") {
+        c.strokeStyle = "#ff3b3b";
+        c.beginPath();
+        c.moveTo(x - 30, y - 30); c.lineTo(x + 30, y + 30);
+        c.moveTo(x + 30, y - 30); c.lineTo(x - 30, y + 30);
+        c.stroke();
+      } else if (v === "O") {
+        c.strokeStyle = "#2f8cff";
+        c.beginPath(); c.arc(x, y, 32, 0, Math.PI * 2); c.stroke();
+      }
+    });
+    if (!this.result && this.turn === "X") {
+      const x = (this.cursor % 3) * cs, y = top + Math.floor(this.cursor / 3) * cs;
+      c.strokeStyle = "rgba(255,204,0,0.6)";
+      c.lineWidth = 3;
+      c.strokeRect(x + 8, y + 8, cs - 16, cs - 16);
+    }
+
+    if (this.result) {
+      if (this.result.line) {
+        const [a, , b] = this.result.line;
+        const [x1, y1] = center(a), [x2, y2] = center(b);
+        c.strokeStyle = "#ffcc00";
+        c.lineWidth = 8;
+        c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+      }
+      const msg = { X: "You win!", O: "CPU wins!", draw: "Draw!" }[this.result.who];
+      c.font = "bold 44px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.lineWidth = 6;
+      c.strokeStyle = "#000";
+      c.strokeText(msg, this.w / 2, top + 1.5 * cs);
+      c.fillStyle = this.result.who === "X" ? "#4cd964" : "#fff";
+      c.fillText(msg, this.w / 2, top + 1.5 * cs);
+    }
+    c.lineCap = "butt";
+    c.textBaseline = "alphabetic";
+  },
+};
+
+// Dino Run: endless runner, jump the cacti and duck the birds
+const dino = {
+  id: "dino", title: "🦖 Dino Run", w: 640, h: 240, ground: 200, dx: 60,
+  controls: "Space, ↑ or click to jump · ↓ to duck",
+  reset() {
+    this.y = 0;          // height above the ground
+    this.vy = 0;
+    this.obs = [];
+    this.speed = 320;
+    this.dist = 0;
+    this.score = 0;
+    this.next = 1;
+    this.duck = false;
+  },
+  jump() { if (this.y === 0) this.vy = 620; },
+  key(code) { if (["Space", "Enter", "ArrowUp", "KeyW"].includes(code)) this.jump(); },
+  tap() { this.jump(); },
+  update(dt) {
+    this.duck = !!(keys.ArrowDown || keys.KeyS);
+    this.vy -= (this.duck && this.y > 0 ? 4000 : 2000) * dt;   // ducking mid-air drops you fast
+    this.y += this.vy * dt;
+    if (this.y <= 0) { this.y = 0; this.vy = 0; }
+
+    this.speed = Math.min(750, this.speed + 8 * dt);
+    this.dist += this.speed * dt;
+    this.score = Math.floor(this.dist / 10);
+
+    this.next -= dt;
+    if (this.next <= 0) {
+      this.next = 0.7 + Math.random() * 1.1;
+      if (this.score > 250 && Math.random() < 0.3) {
+        // Low birds must be jumped, high birds must be ducked
+        this.obs.push({ bird: true, x: this.w, w: 40, h: 24, y: Math.random() < 0.5 ? 4 : 30 });
+      } else {
+        const n = 1 + randInt(3);
+        this.obs.push({ bird: false, x: this.w, w: n * 14 + (n - 1) * 4, h: 30 + Math.random() * 20, y: 0 });
+      }
+    }
+    for (const o of this.obs) o.x -= this.speed * dt;
+    this.obs = this.obs.filter(o => o.x + o.w > 0);
+
+    const dh = this.duck ? 26 : 44, dw = this.duck ? 52 : 40;
+    const left = this.dx + 4, right = this.dx + dw - 6, bottom = this.y + 2, top = this.y + dh - 4;
+    return !this.obs.some(o => right > o.x + 2 && left < o.x + o.w - 2 && top > o.y && bottom < o.y + o.h);
+  },
+  draw(c) {
+    const G = this.ground, ink = "#535353";
+    c.fillStyle = "#f7f7f7";
+    c.fillRect(0, 0, this.w, this.h);
+    c.fillStyle = ink;
+    c.fillRect(0, G, this.w, 2);
+    for (let x = -(this.dist % 40); x < this.w; x += 40) c.fillRect(x + 10, G + 8, 6, 2);
+
+    for (const o of this.obs) {
+      if (o.bird) {
+        const up = Math.floor(this.dist / 60) % 2;
+        const by = G - o.y - o.h;
+        c.fillRect(o.x, by + 10, 30, 8);
+        c.fillRect(o.x - 8, by + 8, 10, 6);
+        c.fillRect(o.x + 10, up ? by : by + 16, 12, 10);
+      } else {
+        c.fillStyle = "#2e8b57";
+        for (let k = 0; k * 18 < o.w; k++) {
+          const x = o.x + k * 18;
+          c.fillRect(x + 4, G - o.h, 6, o.h);
+          c.fillRect(x, G - o.h * 0.7, 4, o.h * 0.3);
+          c.fillRect(x + 10, G - o.h * 0.8, 4, o.h * 0.35);
+        }
+        c.fillStyle = ink;
+      }
+    }
+
+    // Dino made of blocks; legs alternate while running
+    const x = this.dx, by = G - this.y, step = this.y === 0 ? Math.floor(this.dist / 30) % 2 : 2;
+    c.fillStyle = ink;
+    if (this.duck) {
+      c.fillRect(x, by - 26, 40, 18);
+      c.fillRect(x + 30, by - 28, 22, 14);
+      c.fillStyle = "#f7f7f7"; c.fillRect(x + 42, by - 25, 4, 4); c.fillStyle = ink;
+    } else {
+      c.fillRect(x + 20, by - 44, 22, 16);
+      c.fillRect(x + 6, by - 30, 26, 20);
+      c.fillRect(x, by - 34, 8, 12);
+      c.fillRect(x + 30, by - 24, 8, 4);
+      c.fillStyle = "#f7f7f7"; c.fillRect(x + 26, by - 40, 4, 4); c.fillStyle = ink;
+    }
+    c.fillRect(x + 10, by - 10, 6, step === 0 ? 6 : 10);
+    c.fillRect(x + 22, by - 10, 6, step === 1 ? 6 : 10);
+
+    c.font = "bold 16px ui-monospace, monospace";
+    c.textAlign = "right";
+    c.fillText(String(this.score).padStart(5, "0"), this.w - 12, 24);
+  },
+};
+
+const GAMES = { dodge, stack, snake, pong, flappy, memory, invaders, penalty, tetris, 2048: g2048, breakout, mines, ttt, dino };
 const miniCanvas = document.getElementById("miniCanvas");
 const mctx = miniCanvas.getContext("2d");
 let mini = null;
@@ -1651,7 +2424,11 @@ function endMini() {
   }
 }
 
-function miniKey(code) {
+function miniKey(code, repeat) {
+  if (repeat) {
+    if (mini.state === "playing") mini.game.key?.(code, true);
+    return;
+  }
   if (code === "Escape") return closeMini();
   if (code === "KeyR") return startMini();
   if (mini.state !== "playing") {
@@ -1661,11 +2438,21 @@ function miniKey(code) {
   mini.game.key?.(code);
 }
 
+// Mouse position in game coordinates (for games you click on)
+function toGame(e) {
+  const r = miniCanvas.getBoundingClientRect(), g = mini.game;
+  return [(e.clientX - r.left) * g.w / r.width, (e.clientY - r.top) * g.h / r.height];
+}
 miniCanvas.addEventListener("click", e => {
   if (mini.state !== "playing") return startMini();
-  // Pass the click position in game coordinates (Memory Match needs it)
-  const r = miniCanvas.getBoundingClientRect(), g = mini.game;
-  g.tap?.((e.clientX - r.left) * g.w / r.width, (e.clientY - r.top) * g.h / r.height);
+  mini.game.tap?.(...toGame(e));
+});
+miniCanvas.addEventListener("contextmenu", e => {
+  e.preventDefault();   // right-click flags in Minesweeper
+  if (mini.state === "playing") mini.game.tap?.(...toGame(e), true);
+});
+miniCanvas.addEventListener("mousemove", e => {
+  if (mini.state === "playing") mini.game.pointer?.(...toGame(e));
 });
 document.getElementById("miniBack").onclick = closeMini;
 document.querySelectorAll("[data-game]").forEach(btn => {
