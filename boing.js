@@ -9,17 +9,17 @@ function boingOnce(start, freq) {
   const wobble = a.createOscillator();   // wiggles the pitch like a spring
   const depth = a.createGain();
 
-  osc.type = "triangle";
+  osc.type = "sine";   // smoothest, gentlest tone
   osc.frequency.setValueAtTime(freq * 0.6, start);
   osc.frequency.exponentialRampToValueAtTime(freq, start + 0.08);
 
   wobble.frequency.value = 14;
-  depth.gain.setValueAtTime(freq * 0.35, start);
+  depth.gain.setValueAtTime(freq * 0.25, start);
   depth.gain.exponentialRampToValueAtTime(1, start + 0.45);
   wobble.connect(depth).connect(osc.frequency);
 
   vol.gain.setValueAtTime(0.0001, start);
-  vol.gain.exponentialRampToValueAtTime(0.3, start + 0.02);
+  vol.gain.exponentialRampToValueAtTime(0.12, start + 0.04);
   vol.gain.exponentialRampToValueAtTime(0.0001, start + 0.45);
   osc.connect(vol).connect(a.destination);
 
