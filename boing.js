@@ -1,4 +1,4 @@
-// Springy "boing, boing" sound for the jelly letters, made with the Web Audio API.
+// Springy "boing" sound for the jelly letters, made with the Web Audio API.
 // pitch: 0..1, so letters further along the title boing a little higher.
 let boingAudio = null;
 
@@ -73,7 +73,6 @@ function boing(pitch = 0.5) {
     if (boingAudio.state === "suspended") boingAudio.resume();
     const t = boingAudio.currentTime;
     const freq = 180 + pitch * 200;
-    boingOnce(t, freq, 1);                 // boing,
-    boingOnce(t + 0.34, freq * 1.06, 0.6); // boing — a smaller second bounce
+    boingOnce(t, freq, 1);
   } catch (e) {}   // no sound support: the letters still bounce
 }
