@@ -140,6 +140,11 @@
     <div class="card locked"><div class="icon">🚀</div><h2>Space Dodge</h2><p>Coming soon</p></div>
     <div class="card locked"><div class="icon">🧱</div><h2>Block Stack</h2><p>Coming soon</p></div>
     <div class="card locked"><div class="icon">🐍</div><h2>Snake</h2><p>Coming soon</p></div>
+    <div class="card locked"><div class="icon">🏓</div><h2>Paddle Pong</h2><p>Coming soon</p></div>
+    <div class="card locked"><div class="icon">🐦</div><h2>Flappy Flight</h2><p>Coming soon</p></div>
+    <div class="card locked"><div class="icon">🧠</div><h2>Memory Match</h2><p>Coming soon</p></div>
+    <div class="card locked"><div class="icon">👾</div><h2>Alien Invaders</h2><p>Coming soon</p></div>
+    <div class="card locked"><div class="icon">⚽</div><h2>Penalty Kicks</h2><p>Coming soon</p></div>
   </div>
   <a href="index.html">← Back to home</a>
 </section>
@@ -152,7 +157,7 @@
     <button id="onePlayer">1 Player</button>
     <button id="twoPlayers">2 Players</button>
   </div>
-  <p class="controls">P1: W accelerate · S brake · A / D steer<br>P2: ↑ accelerate · ↓ brake · ← / → steer</p>
+  <p class="controls">P1: W accelerate · S brake · A / D steer<br>P2: ↑ accelerate · ↓ brake · ← / → steer<br>R restart race · Esc quit</p>
   <button class="secondary" id="modeBack">← Game library</button>
 </section>
 
@@ -170,7 +175,7 @@
 <!-- Race -->
 <section class="screen" id="race" hidden>
   <canvas id="canvas"></canvas>
-  <button class="secondary" id="quitBtn">Quit (Esc)</button>
+  <button class="secondary" id="quitBtn">Quit (Esc) · Restart (R)</button>
 </section>
 
 <!-- Results -->
@@ -388,6 +393,7 @@ addEventListener("keydown", e => {
   keys[e.code] = true;
   if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
   if (e.code === "Escape" && race) quitRace();
+  if (e.code === "KeyR" && race && !e.repeat) startRace();
 });
 addEventListener("keyup", e => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
@@ -457,10 +463,11 @@ function startRace() {
   const order = [aiCars[0], aiCars[1], ...humans, ...aiCars.slice(2)];
   order.forEach((def, slot) => cars.push(makeCar(def, slot)));
 
+  const loopRunning = !!race;   // restarting mid-race reuses the loop that's already going
   race = { cars, state: "countdown", countdown: 3, time: 0, finishCount: 0, endTimer: 0, last: performance.now() };
   show("race");
   resize();
-  requestAnimationFrame(loop);
+  if (!loopRunning) requestAnimationFrame(loop);
 }
 
 function quitRace() {
