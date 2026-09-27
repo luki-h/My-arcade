@@ -279,6 +279,7 @@
   <button class="secondary" id="miniBack">← Game library</button>
 </section>
 
+<script src="boing.js"></script>
 <script>
 // ---------- Settings ----------
 const W = 1200, H = 800;          // world size
@@ -343,6 +344,7 @@ function makeJelly(el) {
       span.classList.remove("bounce");
       void span.offsetWidth;
       span.classList.add("bounce");
+      boing(i / letters.length);
     });
     el.appendChild(span);
   });

@@ -65,6 +65,7 @@
 <h1 id="title">Hello from my arcade</h1>
 <a class="play-btn" href="game.html">Play Games</a>
 
+<script src="boing.js"></script>
 <script>
   const title = document.getElementById("title");
   const letters = title.textContent.split("");
@@ -78,6 +79,7 @@
       span.classList.remove("bounce");
       void span.offsetWidth; // restart the animation if clicked again
       span.classList.add("bounce");
+      boing(i / letters.length);
     });
     title.appendChild(span);
   });
