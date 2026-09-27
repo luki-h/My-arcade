@@ -32,28 +32,6 @@
   .play-btn:hover {
     filter: brightness(1.1);
   }
-  /* Coming soon cards: dark glassy backing keeps text readable on the galaxy */
-  .soon {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 16px;
-    margin-top: 32px;
-    padding: 0 16px;
-  }
-  .soon-card {
-    width: 160px;
-    padding: 16px;
-    border-radius: 14px;
-    text-align: center;
-    color: #fff;
-    font-family: sans-serif;
-    background: rgba(10, 8, 30, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-  .soon-card .icon { font-size: 2.5em; }
-  .soon-card h2 { font-size: 1.1em; margin: 8px 0 4px; }
-  .soon-card p { margin: 0; color: #ffcc00; font-weight: bold; }
   #title {
     font-size: 3em;
     text-align: center;
@@ -86,12 +64,6 @@
 <canvas id="stars"></canvas>
 <h1 id="title">Hello from my arcade</h1>
 <a class="play-btn" href="game.html">Play Games</a>
-
-<div class="soon">
-  <div class="soon-card"><div class="icon">🚀</div><h2>Space Dodge</h2><p>Coming soon</p></div>
-  <div class="soon-card"><div class="icon">🧱</div><h2>Block Stack</h2><p>Coming soon</p></div>
-  <div class="soon-card"><div class="icon">🐍</div><h2>Snake</h2><p>Coming soon</p></div>
-</div>
 
 <script>
   const title = document.getElementById("title");

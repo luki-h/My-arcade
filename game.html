@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Arcade – Coin Rush Racing</title>
+<title>My Arcade</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -122,6 +122,11 @@
   .verdict { font-size: 1.4em; font-weight: 800; }
   .win { color: #4cd964; }
   .lose { color: #ff9f43; }
+
+  /* Mini games */
+  #mini { gap: 12px; }
+  .mini-hud { display: flex; gap: 24px; font-weight: 700; color: #ffcc00; }
+  #miniCanvas { border-radius: 10px; box-shadow: 0 0 24px rgba(0, 0, 0, 0.6); cursor: pointer; }
 </style>
 </head>
 <body>
@@ -137,9 +142,24 @@
       <p>Race, earn coins, upgrade your car. 1–2 players.</p>
       <button id="playRacing">Play</button>
     </div>
-    <div class="card locked"><div class="icon">🚀</div><h2>Space Dodge</h2><p>Coming soon</p></div>
-    <div class="card locked"><div class="icon">🧱</div><h2>Block Stack</h2><p>Coming soon</p></div>
-    <div class="card locked"><div class="icon">🐍</div><h2>Snake</h2><p>Coming soon</p></div>
+    <div class="card">
+      <div class="icon">🚀</div>
+      <h2>Space Dodge</h2>
+      <p>Steer your ship through a falling asteroid field.</p>
+      <button data-game="dodge">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">🧱</div>
+      <h2>Block Stack</h2>
+      <p>Drop sliding blocks and build the tallest tower.</p>
+      <button data-game="stack">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">🐍</div>
+      <h2>Snake</h2>
+      <p>Eat apples, grow longer, don't bite yourself.</p>
+      <button data-game="snake">Play</button>
+    </div>
     <div class="card locked"><div class="icon">🏓</div><h2>Paddle Pong</h2><p>Coming soon</p></div>
     <div class="card locked"><div class="icon">🐦</div><h2>Flappy Flight</h2><p>Coming soon</p></div>
     <div class="card locked"><div class="icon">🧠</div><h2>Memory Match</h2><p>Coming soon</p></div>
@@ -188,6 +208,15 @@
     <button class="secondary" id="toGarage">Garage</button>
     <button id="raceAgain">Race Again</button>
   </div>
+</section>
+
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
 </section>
 
 <script>
@@ -394,6 +423,7 @@ addEventListener("keydown", e => {
   if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
   if (e.code === "Escape" && race) quitRace();
   if (e.code === "KeyR" && race && !e.repeat) startRace();
+  if (mini && !e.repeat) miniKey(e.code);
 });
 addEventListener("keyup", e => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
@@ -788,6 +818,370 @@ function finishRace() {
   });
 
   show("results");
+}
+
+// ---------- Mini games ----------
+const BEST_KEY = "myArcadeBest";
+let bests = {};
+try { bests = JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch (e) {}
+const saveBests = () => { try { localStorage.setItem(BEST_KEY, JSON.stringify(bests)); } catch (e) {} };
+const randInt = n => Math.floor(Math.random() * n);
+
+// Space Dodge: slide left/right, don't get hit by asteroids
+const dodge = {
+  id: "dodge", title: "🚀 Space Dodge", w: 480, h: 640,
+  controls: "A / D or ← / → to move · Dodge the asteroids!",
+  stars: Array.from({ length: 70 }, () => ({ x: Math.random() * 480, y: Math.random() * 640, s: Math.random() * 2 + 0.5 })),
+  reset() {
+    this.x = this.w / 2;
+    this.t = 0;
+    this.rocks = [];
+    this.spawn = 0;
+    this.score = 0;
+  },
+  update(dt) {
+    const dir = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    this.x = clamp(this.x + dir * 340 * dt, 20, this.w - 20);
+    this.t += dt;
+    this.score = Math.floor(this.t * 10);
+
+    for (const s of this.stars) {
+      s.y += s.s * 40 * dt;
+      if (s.y > this.h) { s.y = 0; s.x = Math.random() * this.w; }
+    }
+
+    // Rocks come faster and more often the longer you survive
+    this.spawn -= dt;
+    if (this.spawn <= 0) {
+      this.spawn = Math.max(0.22, 0.8 - this.t * 0.015);
+      const r = 12 + Math.random() * 18;
+      this.rocks.push({
+        x: r + Math.random() * (this.w - 2 * r), y: -r, r,
+        vy: 160 + this.t * 5 + Math.random() * 90,
+        rot: 0, spin: (Math.random() - 0.5) * 3,
+      });
+    }
+    for (const rk of this.rocks) { rk.y += rk.vy * dt; rk.rot += rk.spin * dt; }
+    this.rocks = this.rocks.filter(rk => rk.y - rk.r < this.h);
+
+    const sy = this.h - 60;
+    return !this.rocks.some(rk => Math.hypot(rk.x - this.x, rk.y - sy) < rk.r + 12);
+  },
+  draw(c) {
+    c.fillStyle = "#07051a";
+    c.fillRect(0, 0, this.w, this.h);
+    c.fillStyle = "#fff";
+    for (const s of this.stars) c.fillRect(s.x, s.y, s.s, s.s);
+
+    for (const rk of this.rocks) {
+      c.save();
+      c.translate(rk.x, rk.y);
+      c.rotate(rk.rot);
+      c.fillStyle = "#8a7f75";
+      c.beginPath(); c.arc(0, 0, rk.r, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#6b625a";
+      c.beginPath(); c.arc(rk.r * 0.3, -rk.r * 0.2, rk.r * 0.3, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(-rk.r * 0.35, rk.r * 0.3, rk.r * 0.2, 0, Math.PI * 2); c.fill();
+      c.restore();
+    }
+
+    c.save();
+    c.translate(this.x, this.h - 60);
+    if (mini.state === "playing") {
+      c.fillStyle = Math.random() < 0.5 ? "#ff9f43" : "#ffcc00";
+      c.beginPath(); c.moveTo(-7, 12); c.lineTo(7, 12); c.lineTo(0, 24 + Math.random() * 8); c.fill();
+    }
+    c.fillStyle = "#e8ecff";
+    c.beginPath(); c.moveTo(0, -20); c.lineTo(14, 14); c.lineTo(0, 8); c.lineTo(-14, 14); c.closePath(); c.fill();
+    c.fillStyle = "#2f8cff";
+    c.beginPath(); c.arc(0, -3, 4, 0, Math.PI * 2); c.fill();
+    c.restore();
+  },
+};
+
+// Block Stack: drop the sliding block on the tower; overhangs get chopped off
+const stack = {
+  id: "stack", title: "🧱 Block Stack", w: 400, h: 600, bh: 30,
+  controls: "Space or click to drop the block · Line it up perfectly to keep it wide",
+  reset() {
+    this.blocks = [{ x: 100, w: 200 }];
+    this.debris = [];
+    this.score = 0;
+    this.cam = 0;
+    this.dying = 0;
+    this.nextBlock();
+  },
+  nextBlock() {
+    const top = this.blocks[this.blocks.length - 1];
+    const fromLeft = this.blocks.length % 2 === 0;
+    this.cur = { x: fromLeft ? 0 : this.w - top.w, w: top.w, dir: fromLeft ? 1 : -1 };
+    this.speed = 150 + this.blocks.length * 8;
+  },
+  levelY(i) { return this.h - 40 - (i + 1) * this.bh + this.cam; },
+  color(i) { return `hsl(${(i * 14) % 360}, 75%, 58%)`; },
+  drop() {
+    if (!this.cur) return;
+    const top = this.blocks[this.blocks.length - 1], c = this.cur, lvl = this.blocks.length;
+    let left = Math.max(c.x, top.x), right = Math.min(c.x + c.w, top.x + top.w);
+    if (right <= left) {
+      // Missed completely: the whole block falls and the game ends
+      this.debris.push({ x: c.x, w: c.w, lvl, dy: 0, vy: 0 });
+      this.cur = null;
+      this.dying = 0.9;
+      return;
+    }
+    if (Math.abs(c.x - top.x) < 5) {
+      left = top.x; right = top.x + top.w;   // close enough counts as perfect
+    } else {
+      if (c.x < left) this.debris.push({ x: c.x, w: left - c.x, lvl, dy: 0, vy: 0 });
+      if (c.x + c.w > right) this.debris.push({ x: right, w: c.x + c.w - right, lvl, dy: 0, vy: 0 });
+    }
+    this.blocks.push({ x: left, w: right - left });
+    this.score++;
+    this.nextBlock();
+  },
+  key(code) { if (code === "Space" || code === "Enter") this.drop(); },
+  tap() { this.drop(); },
+  update(dt) {
+    if (this.cur) {
+      const c = this.cur;
+      c.x += c.dir * this.speed * dt;
+      if (c.x < 0) { c.x = 0; c.dir = 1; }
+      if (c.x + c.w > this.w) { c.x = this.w - c.w; c.dir = -1; }
+    }
+    for (const d of this.debris) { d.vy += 900 * dt; d.dy += d.vy * dt; }
+    this.debris = this.debris.filter(d => d.dy < 1200);
+
+    // Keep the top of the tower in view
+    const target = Math.max(0, (this.blocks.length + 1) * this.bh - 380);
+    this.cam += (target - this.cam) * Math.min(1, dt * 6);
+
+    if (this.dying) {
+      this.dying -= dt;
+      return this.dying > 0;
+    }
+    return true;
+  },
+  draw(c) {
+    const g = c.createLinearGradient(0, 0, 0, this.h);
+    g.addColorStop(0, "#1b1e3b");
+    g.addColorStop(1, "#3a2f55");
+    c.fillStyle = g;
+    c.fillRect(0, 0, this.w, this.h);
+
+    c.fillStyle = "#2a2f45";
+    c.fillRect(0, this.levelY(-1), this.w, this.h);
+
+    const drawBlock = (x, w, y, color) => {
+      c.fillStyle = color;
+      c.fillRect(x, y, w, this.bh);
+      c.fillStyle = "rgba(255,255,255,0.25)";
+      c.fillRect(x, y, w, 4);
+      c.strokeStyle = "rgba(0,0,0,0.3)";
+      c.strokeRect(x + 0.5, y + 0.5, w - 1, this.bh - 1);
+    };
+    this.blocks.forEach((b, i) => drawBlock(b.x, b.w, this.levelY(i), this.color(i)));
+    for (const d of this.debris) drawBlock(d.x, d.w, this.levelY(d.lvl) + d.dy, this.color(d.lvl));
+    if (this.cur) drawBlock(this.cur.x, this.cur.w, this.levelY(this.blocks.length), this.color(this.blocks.length));
+  },
+};
+
+// Snake: classic grid snake
+const snake = {
+  id: "snake", title: "🐍 Snake", w: 480, h: 480, cells: 20,
+  controls: "WASD or arrow keys to turn · Eat apples, don't hit the walls or yourself",
+  reset() {
+    this.body = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }];
+    this.dir = { x: 1, y: 0 };
+    this.queue = [];
+    this.timer = 0;
+    this.score = 0;
+    this.placeFood();
+  },
+  placeFood() {
+    do {
+      this.food = { x: randInt(this.cells), y: randInt(this.cells) };
+    } while (this.body.some(b => b.x === this.food.x && b.y === this.food.y));
+  },
+  key(code) {
+    const d = {
+      KeyW: [0, -1], ArrowUp: [0, -1], KeyS: [0, 1], ArrowDown: [0, 1],
+      KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0],
+    }[code];
+    if (!d || this.queue.length >= 3) return;
+    // Queue turns so quick taps aren't lost, but never allow a U-turn into yourself
+    const last = this.queue[this.queue.length - 1] || this.dir;
+    if (d[0] === -last.x && d[1] === -last.y) return;
+    if (d[0] === last.x && d[1] === last.y) return;
+    this.queue.push({ x: d[0], y: d[1] });
+  },
+  update(dt) {
+    this.timer += dt;
+    const step = Math.max(0.06, 0.13 - this.score * 0.003);
+    while (this.timer >= step) {
+      this.timer -= step;
+      if (this.queue.length) this.dir = this.queue.shift();
+      const head = { x: this.body[0].x + this.dir.x, y: this.body[0].y + this.dir.y };
+      if (head.x < 0 || head.y < 0 || head.x >= this.cells || head.y >= this.cells) return false;
+      const eating = head.x === this.food.x && head.y === this.food.y;
+      const solid = eating ? this.body : this.body.slice(0, -1);   // the tail moves out of the way
+      if (solid.some(b => b.x === head.x && b.y === head.y)) return false;
+      this.body.unshift(head);
+      if (eating) {
+        this.score++;
+        if (this.body.length < this.cells * this.cells) this.placeFood();
+      } else {
+        this.body.pop();
+      }
+    }
+    return true;
+  },
+  draw(c) {
+    const s = this.w / this.cells;
+    for (let y = 0; y < this.cells; y++) {
+      for (let x = 0; x < this.cells; x++) {
+        c.fillStyle = (x + y) % 2 ? "#3c8d3c" : "#439a43";
+        c.fillRect(x * s, y * s, s, s);
+      }
+    }
+    // Apple
+    c.fillStyle = "#e53935";
+    c.beginPath(); c.arc((this.food.x + 0.5) * s, (this.food.y + 0.55) * s, s * 0.38, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#2ecc71";
+    c.fillRect((this.food.x + 0.5) * s, this.food.y * s + 2, 4, 6);
+
+    this.body.forEach((b, i) => {
+      c.fillStyle = i === 0 ? "#1f5fbf" : "#2f8cff";
+      c.beginPath();
+      if (c.roundRect) c.roundRect(b.x * s + 1, b.y * s + 1, s - 2, s - 2, 6); else c.rect(b.x * s + 1, b.y * s + 1, s - 2, s - 2);
+      c.fill();
+    });
+    // Eyes look where the snake is heading
+    const h = this.body[0], d = this.dir;
+    const cx = (h.x + 0.5) * s + d.x * 4, cy = (h.y + 0.5) * s + d.y * 4;
+    c.fillStyle = "#fff";
+    for (const side of [-1, 1]) {
+      c.beginPath(); c.arc(cx - d.y * side * 5, cy + d.x * side * 5, 3, 0, Math.PI * 2); c.fill();
+    }
+  },
+};
+
+const GAMES = { dodge, stack, snake };
+const miniCanvas = document.getElementById("miniCanvas");
+const mctx = miniCanvas.getContext("2d");
+let mini = null;
+let miniScale = 1;
+let miniRaf = 0;
+
+function openMini(game) {
+  document.activeElement?.blur();
+  game.reset();
+  mini = { game, state: "ready", newBest: false, last: performance.now() };
+  document.getElementById("miniTitle").textContent = game.title;
+  document.getElementById("miniControls").textContent = game.controls + " · Esc to leave";
+  show("mini");
+  resizeMini();
+  cancelAnimationFrame(miniRaf);
+  miniRaf = requestAnimationFrame(miniLoop);
+}
+
+function closeMini() {
+  mini = null;
+  cancelAnimationFrame(miniRaf);
+  show("library");
+}
+
+function startMini() {
+  mini.game.reset();
+  mini.state = "playing";
+  mini.newBest = false;
+}
+
+function endMini() {
+  const g = mini.game;
+  mini.state = "over";
+  if (g.score > (bests[g.id] || 0)) {
+    bests[g.id] = g.score;
+    mini.newBest = true;
+    saveBests();
+  }
+}
+
+function miniKey(code) {
+  if (code === "Escape") return closeMini();
+  if (code === "KeyR") return startMini();
+  if (mini.state !== "playing") {
+    if (code === "Space" || code === "Enter") startMini();
+    return;
+  }
+  mini.game.key?.(code);
+}
+
+miniCanvas.addEventListener("click", () => {
+  if (mini.state !== "playing") startMini();
+  else mini.game.tap?.();
+});
+document.getElementById("miniBack").onclick = closeMini;
+document.querySelectorAll("[data-game]").forEach(btn => {
+  btn.onclick = () => openMini(GAMES[btn.dataset.game]);
+});
+
+function resizeMini() {
+  if (!mini) return;
+  const g = mini.game;
+  const s = Math.max(0.3, Math.min((innerWidth - 32) / g.w, (innerHeight - 230) / g.h, 1.5));
+  const dpr = devicePixelRatio || 1;
+  miniCanvas.style.width = g.w * s + "px";
+  miniCanvas.style.height = g.h * s + "px";
+  miniCanvas.width = Math.round(g.w * s * dpr);
+  miniCanvas.height = Math.round(g.h * s * dpr);
+  miniScale = s * dpr;
+}
+addEventListener("resize", resizeMini);
+
+function miniLoop(now) {
+  if (!mini) return;
+  const dt = Math.min(0.033, (now - mini.last) / 1000);
+  mini.last = now;
+  if (mini.state === "playing" && !mini.game.update(dt)) endMini();
+  drawMini();
+  miniRaf = requestAnimationFrame(miniLoop);
+}
+
+function drawMini() {
+  const g = mini.game, c = mctx;
+  c.setTransform(miniScale, 0, 0, miniScale, 0, 0);
+  g.draw(c);
+
+  if (mini.state !== "playing") {
+    const cy = g.h / 2;
+    c.fillStyle = "rgba(0,0,0,0.6)";
+    c.fillRect(0, 0, g.w, g.h);
+    c.textAlign = "center";
+    c.fillStyle = "#fff";
+    if (mini.state === "ready") {
+      c.font = "bold 34px system-ui, sans-serif";
+      c.fillText(g.title, g.w / 2, cy - 20);
+      c.font = "18px system-ui, sans-serif";
+      c.fillStyle = "#ffcc00";
+      c.fillText("Press Space or click to start", g.w / 2, cy + 20);
+    } else {
+      c.font = "bold 40px system-ui, sans-serif";
+      c.fillText("Game Over", g.w / 2, cy - 40);
+      c.font = "22px system-ui, sans-serif";
+      c.fillText(`Score ${g.score}`, g.w / 2, cy);
+      if (mini.newBest) {
+        c.fillStyle = "#4cd964";
+        c.fillText("🏆 New best!", g.w / 2, cy + 32);
+      }
+      c.font = "18px system-ui, sans-serif";
+      c.fillStyle = "#ffcc00";
+      c.fillText("Space or click to play again", g.w / 2, cy + 70);
+    }
+  }
+
+  document.getElementById("miniScore").textContent = `Score: ${g.score}`;
+  document.getElementById("miniBest").textContent = `Best: ${bests[g.id] || 0}`;
 }
 </script>
 </body>
