@@ -74,7 +74,6 @@
     gap: 10px;
   }
   .card .icon { font-size: 3em; }
-  .card.locked { opacity: 0.45; }
 
   /* Garage */
   .garage {
@@ -160,11 +159,36 @@
       <p>Eat apples, grow longer, don't bite yourself.</p>
       <button data-game="snake">Play</button>
     </div>
-    <div class="card locked"><div class="icon">🏓</div><h2>Paddle Pong</h2><p>Coming soon</p></div>
-    <div class="card locked"><div class="icon">🐦</div><h2>Flappy Flight</h2><p>Coming soon</p></div>
-    <div class="card locked"><div class="icon">🧠</div><h2>Memory Match</h2><p>Coming soon</p></div>
-    <div class="card locked"><div class="icon">👾</div><h2>Alien Invaders</h2><p>Coming soon</p></div>
-    <div class="card locked"><div class="icon">⚽</div><h2>Penalty Kicks</h2><p>Coming soon</p></div>
+    <div class="card">
+      <div class="icon">🏓</div>
+      <h2>Paddle Pong</h2>
+      <p>Beat the computer at pong. First to 7 wins.</p>
+      <button data-game="pong">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">🐦</div>
+      <h2>Flappy Flight</h2>
+      <p>Flap through the gaps between the pipes.</p>
+      <button data-game="flappy">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">🧠</div>
+      <h2>Memory Match</h2>
+      <p>Find matching pairs before the clock runs out.</p>
+      <button data-game="memory">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">👾</div>
+      <h2>Alien Invaders</h2>
+      <p>Blast the alien waves before they land.</p>
+      <button data-game="invaders">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">⚽</div>
+      <h2>Penalty Kicks</h2>
+      <p>Time your shot and beat the goalkeeper.</p>
+      <button data-game="penalty">Play</button>
+    </div>
   </div>
   <a href="index.html">← Back to home</a>
 </section>
@@ -1066,7 +1090,527 @@ const snake = {
   },
 };
 
-const GAMES = { dodge, stack, snake };
+// Paddle Pong: you vs the computer, first to 7
+const pong = {
+  id: "pong", title: "🏓 Paddle Pong", w: 640, h: 420, ph: 80, win: 7,
+  controls: "W / S or ↑ / ↓ to move your paddle · First to 7 wins",
+  reset() {
+    this.py = this.cy = (this.h - this.ph) / 2;
+    this.score = 0;
+    this.cpu = 0;
+    this.endText = "";
+    this.serve(1);
+  },
+  serve(dir) {
+    const a = (Math.random() - 0.5) * 0.8;
+    this.bx = this.w / 2;
+    this.by = this.h / 2;
+    this.vx = Math.cos(a) * dir;
+    this.vy = Math.sin(a);
+    this.speed = 320;
+    this.wait = 0.8;
+  },
+  // Where the ball hits the paddle decides the bounce angle
+  bounce(paddleY, dir) {
+    const off = clamp((this.by - (paddleY + this.ph / 2)) / (this.ph / 2), -1, 1);
+    this.vx = Math.cos(off) * dir;
+    this.vy = Math.sin(off);
+    this.speed = Math.min(this.speed * 1.06, 800);
+  },
+  update(dt) {
+    const mv = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+    this.py = clamp(this.py + mv * 380 * dt, 0, this.h - this.ph);
+    const aim = this.by - this.ph / 2;
+    this.cy = clamp(this.cy + clamp(aim - this.cy, -250 * dt, 250 * dt), 0, this.h - this.ph);
+
+    if (this.wait > 0) { this.wait -= dt; return true; }
+    this.bx += this.vx * this.speed * dt;
+    this.by += this.vy * this.speed * dt;
+    if (this.by < 8) { this.by = 8; this.vy = Math.abs(this.vy); }
+    if (this.by > this.h - 8) { this.by = this.h - 8; this.vy = -Math.abs(this.vy); }
+
+    const near = py => this.by > py - 8 && this.by < py + this.ph + 8;
+    if (this.vx < 0 && this.bx < 40 && this.bx > 12 && near(this.py)) { this.bx = 40; this.bounce(this.py, 1); }
+    if (this.vx > 0 && this.bx > this.w - 40 && this.bx < this.w - 12 && near(this.cy)) { this.bx = this.w - 40; this.bounce(this.cy, -1); }
+
+    if (this.bx < -10) { this.cpu++; this.serve(-1); }
+    if (this.bx > this.w + 10) { this.score++; this.serve(1); }
+    if (this.score >= this.win) { this.endText = "🏆 You win!"; return false; }
+    if (this.cpu >= this.win) { this.endText = "CPU wins"; return false; }
+    return true;
+  },
+  draw(c) {
+    c.fillStyle = "#111827";
+    c.fillRect(0, 0, this.w, this.h);
+    c.fillStyle = "rgba(255,255,255,0.25)";
+    for (let y = 10; y < this.h; y += 30) c.fillRect(this.w / 2 - 2, y, 4, 16);
+
+    c.font = "bold 48px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.fillStyle = "rgba(255,255,255,0.5)";
+    c.fillText(this.score, this.w / 2 - 60, 60);
+    c.fillText(this.cpu, this.w / 2 + 60, 60);
+    c.font = "13px system-ui, sans-serif";
+    c.fillText("YOU", this.w / 2 - 60, 80);
+    c.fillText("CPU", this.w / 2 + 60, 80);
+
+    c.fillStyle = "#ff3b3b";
+    c.fillRect(20, this.py, 12, this.ph);
+    c.fillStyle = "#2f8cff";
+    c.fillRect(this.w - 32, this.cy, 12, this.ph);
+    c.fillStyle = "#ffcc00";
+    c.beginPath(); c.arc(this.bx, this.by, 8, 0, Math.PI * 2); c.fill();
+  },
+};
+
+// Flappy Flight: flap through the pipe gaps
+const flappy = {
+  id: "flappy", title: "🐦 Flappy Flight", w: 400, h: 600, gap: 160, pw: 60, bx: 100,
+  controls: "Space, W, ↑ or click to flap · Fly through the gaps",
+  reset() {
+    this.y = this.h / 2;
+    this.vy = 0;
+    this.pipes = [];
+    this.timer = 0.6;
+    this.score = 0;
+    this.scroll = 0;
+  },
+  flap() { this.vy = -400; },
+  key(code) { if (["Space", "Enter", "KeyW", "ArrowUp"].includes(code)) this.flap(); },
+  tap() { this.flap(); },
+  update(dt) {
+    this.vy += 1300 * dt;
+    this.y += this.vy * dt;
+    if (this.y < 14) { this.y = 14; this.vy = 0; }
+    this.scroll = (this.scroll + 160 * dt) % 24;
+
+    this.timer -= dt;
+    if (this.timer <= 0) {
+      this.timer = 1.5;
+      this.pipes.push({ x: this.w, top: 60 + Math.random() * (this.h - 180 - this.gap), passed: false });
+    }
+    for (const p of this.pipes) {
+      p.x -= 160 * dt;
+      if (!p.passed && p.x + this.pw < this.bx) { p.passed = true; this.score++; }
+    }
+    this.pipes = this.pipes.filter(p => p.x > -this.pw);
+
+    const r = 14;
+    if (this.y + r > this.h - 60) return false;
+    return !this.pipes.some(p =>
+      this.bx + r > p.x && this.bx - r < p.x + this.pw && (this.y - r < p.top || this.y + r > p.top + this.gap));
+  },
+  draw(c) {
+    const g = c.createLinearGradient(0, 0, 0, this.h);
+    g.addColorStop(0, "#4fc3f7");
+    g.addColorStop(1, "#b3e5fc");
+    c.fillStyle = g;
+    c.fillRect(0, 0, this.w, this.h);
+
+    for (const p of this.pipes) {
+      c.fillStyle = "#2ecc71";
+      c.fillRect(p.x, 0, this.pw, p.top);
+      c.fillRect(p.x, p.top + this.gap, this.pw, this.h);
+      c.fillStyle = "#27ae60";
+      c.fillRect(p.x - 4, p.top - 20, this.pw + 8, 20);
+      c.fillRect(p.x - 4, p.top + this.gap, this.pw + 8, 20);
+    }
+
+    c.fillStyle = "#c8a165";
+    c.fillRect(0, this.h - 60, this.w, 60);
+    c.fillStyle = "#6ab04c";
+    c.fillRect(0, this.h - 60, this.w, 12);
+    c.fillStyle = "#5a9a3c";
+    for (let x = -this.scroll; x < this.w; x += 24) c.fillRect(x, this.h - 60, 12, 12);
+
+    c.save();
+    c.translate(this.bx, this.y);
+    c.rotate(clamp(this.vy / 900, -0.5, 1));
+    c.fillStyle = "#ffcc00";
+    c.beginPath(); c.arc(0, 0, 14, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#ff9f43";
+    c.beginPath(); c.moveTo(10, -2); c.lineTo(22, 3); c.lineTo(10, 8); c.fill();
+    c.fillStyle = "#fff";
+    c.beginPath(); c.arc(5, -5, 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#111";
+    c.beginPath(); c.arc(7, -5, 2.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#f5b700";
+    c.beginPath(); c.ellipse(-5, 3, 8, 5, 0, 0, Math.PI * 2); c.fill();
+    c.restore();
+
+    c.font = "bold 44px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.lineWidth = 5;
+    c.strokeStyle = "#000";
+    c.strokeText(this.score, this.w / 2, 70);
+    c.fillStyle = "#fff";
+    c.fillText(this.score, this.w / 2, 70);
+  },
+};
+
+// Memory Match: find pairs against the clock; clearing a board deals a new one
+const memory = {
+  id: "memory", title: "🧠 Memory Match", w: 480, h: 540, top: 60, cell: 120,
+  controls: "Click cards (or arrow keys + Space) to flip · Clear a board for +10 seconds",
+  endText: "⏰ Time's up!",
+  faces: ["🍎", "🍌", "🍇", "🍓", "🍒", "🥝", "🍍", "🍉"],
+  reset() {
+    this.left = 60;
+    this.score = 0;
+    this.cursor = 0;
+    this.redeal = 0;
+    this.deal();
+  },
+  deal() {
+    const f = [...this.faces, ...this.faces];
+    for (let i = f.length - 1; i > 0; i--) {
+      const j = randInt(i + 1);
+      [f[i], f[j]] = [f[j], f[i]];
+    }
+    this.cards = f.map(face => ({ face, up: false, done: false }));
+    this.open = [];
+    this.hide = 0;
+  },
+  flip(i) {
+    const card = this.cards[i];
+    if (!card || card.up || this.hide > 0 || this.redeal > 0) return;
+    card.up = true;
+    this.open.push(card);
+    if (this.open.length < 2) return;
+    const [a, b] = this.open;
+    if (a.face === b.face) {
+      a.done = b.done = true;
+      this.open = [];
+      this.score++;
+      if (this.cards.every(c => c.done)) { this.left += 10; this.redeal = 0.6; }
+    } else {
+      this.hide = 0.7;   // let the player see both before they flip back
+    }
+  },
+  key(code) {
+    const move = { ArrowLeft: -1, KeyA: -1, ArrowRight: 1, KeyD: 1, ArrowUp: -4, KeyW: -4, ArrowDown: 4, KeyS: 4 }[code];
+    if (move) {
+      const col = this.cursor % 4 + (Math.abs(move) === 1 ? move : 0);
+      const row = Math.floor(this.cursor / 4) + (Math.abs(move) === 4 ? move / 4 : 0);
+      this.cursor = clamp(row, 0, 3) * 4 + clamp(col, 0, 3);
+    }
+    if (code === "Space" || code === "Enter") this.flip(this.cursor);
+  },
+  tap(x, y) {
+    const col = Math.floor(x / this.cell), row = Math.floor((y - this.top) / this.cell);
+    if (col < 0 || col > 3 || row < 0 || row > 3) return;
+    this.cursor = row * 4 + col;
+    this.flip(this.cursor);
+  },
+  update(dt) {
+    this.left -= dt;
+    if (this.hide > 0) {
+      this.hide -= dt;
+      if (this.hide <= 0) { this.open.forEach(c => c.up = false); this.open = []; }
+    }
+    if (this.redeal > 0) {
+      this.redeal -= dt;
+      if (this.redeal <= 0) this.deal();
+    }
+    return this.left > 0;
+  },
+  draw(c) {
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(0, 0, this.w, this.h);
+
+    const frac = clamp(this.left / 60, 0, 1);
+    c.fillStyle = "#3a3f55";
+    c.fillRect(16, 20, this.w - 32, 16);
+    c.fillStyle = this.left < 10 ? "#ff3b3b" : "#ffcc00";
+    c.fillRect(16, 20, (this.w - 32) * frac, 16);
+    c.font = "bold 14px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillStyle = "#111";
+    c.fillText(`${Math.ceil(Math.max(0, this.left))}s`, this.w / 2, 29);
+
+    this.cards.forEach((card, i) => {
+      const x = (i % 4) * this.cell + 8, y = this.top + Math.floor(i / 4) * this.cell + 8, s = this.cell - 16;
+      c.fillStyle = card.done ? "rgba(76,217,100,0.35)" : card.up ? "#fff" : "#3a3f55";
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x, y, s, s, 12); else c.rect(x, y, s, s);
+      c.fill();
+      if (card.up) {
+        c.font = "56px system-ui, sans-serif";
+        c.fillText(card.face, x + s / 2, y + s / 2 + 2);
+      } else {
+        c.font = "bold 40px system-ui, sans-serif";
+        c.fillStyle = "#6c7293";
+        c.fillText("?", x + s / 2, y + s / 2);
+      }
+      if (i === this.cursor) {
+        c.strokeStyle = "#ffcc00";
+        c.lineWidth = 3;
+        c.stroke();
+      }
+    });
+    c.textBaseline = "alphabetic";
+  },
+};
+
+// Alien Invaders: shoot the marching aliens before they land
+const invaders = {
+  id: "invaders", title: "👾 Alien Invaders", w: 480, h: 600,
+  controls: "A / D or ← / → to move · Space to shoot · Don't let them land!",
+  stars: Array.from({ length: 60 }, () => [Math.random() * 480, Math.random() * 600]),
+  reset() {
+    this.x = this.w / 2;
+    this.lives = 3;
+    this.score = 0;
+    this.wave = 0;
+    this.shots = [];
+    this.bombs = [];
+    this.cool = 0;
+    this.flash = 0;
+    this.newWave();
+  },
+  newWave() {
+    this.wave++;
+    this.aliens = [];
+    for (let r = 0; r < 5; r++) {
+      for (let col = 0; col < 8; col++) this.aliens.push({ x: 60 + col * 46, y: 70 + r * 38, row: r, alive: true });
+    }
+    this.dir = 1;
+    this.speed = 30 + this.wave * 10;
+    this.bombTimer = 1;
+    this.bombs = [];
+  },
+  update(dt) {
+    const mv = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    this.x = clamp(this.x + mv * 300 * dt, 20, this.w - 20);
+    this.flash -= dt;
+
+    this.cool -= dt;
+    if (keys.Space && this.cool <= 0 && this.shots.length < 3) {
+      this.shots.push({ x: this.x, y: this.h - 70 });
+      this.cool = 0.35;
+    }
+    for (const s of this.shots) s.y -= 520 * dt;
+
+    const alive = this.aliens.filter(a => a.alive);
+    if (!alive.length) { this.newWave(); return true; }
+
+    // March side to side, stepping down at the edges; fewer aliens = faster march
+    const speed = this.speed * (1 + (40 - alive.length) / 20);
+    let edge = false;
+    for (const a of alive) {
+      a.x += this.dir * speed * dt;
+      if (a.x < 20 || a.x > this.w - 20) edge = true;
+    }
+    if (edge) {
+      this.dir *= -1;
+      for (const a of alive) { a.x = clamp(a.x, 20, this.w - 20); a.y += 16; }
+    }
+
+    for (const s of this.shots) {
+      for (const a of alive) {
+        if (a.alive && Math.abs(s.x - a.x) < 16 && Math.abs(s.y - a.y) < 14) {
+          a.alive = false;
+          s.y = -100;
+          this.score += [30, 20, 20, 10, 10][a.row];
+          break;
+        }
+      }
+    }
+    this.shots = this.shots.filter(s => s.y > -10);
+
+    this.bombTimer -= dt;
+    if (this.bombTimer <= 0) {
+      this.bombTimer = Math.max(0.3, 1.2 - this.wave * 0.1);
+      const a = alive[randInt(alive.length)];
+      this.bombs.push({ x: a.x, y: a.y + 12 });
+    }
+    for (const b of this.bombs) b.y += 240 * dt;
+    const py = this.h - 50;
+    this.bombs = this.bombs.filter(b => {
+      if (Math.abs(b.x - this.x) < 18 && Math.abs(b.y - py) < 14) {
+        this.lives--;
+        this.flash = 1;
+        return false;
+      }
+      return b.y < this.h;
+    });
+
+    if (this.lives <= 0) return false;
+    return !alive.some(a => a.alive && a.y > this.h - 90);
+  },
+  draw(c) {
+    c.fillStyle = "#05030f";
+    c.fillRect(0, 0, this.w, this.h);
+    c.fillStyle = "rgba(255,255,255,0.6)";
+    for (const [x, y] of this.stars) c.fillRect(x, y, 1.5, 1.5);
+
+    c.font = "28px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    for (const a of this.aliens) if (a.alive) c.fillText("👾", a.x, a.y);
+
+    c.fillStyle = "#ffcc00";
+    for (const s of this.shots) c.fillRect(s.x - 2, s.y - 8, 4, 12);
+    c.fillStyle = "#ff3b3b";
+    for (const b of this.bombs) c.fillRect(b.x - 2, b.y - 6, 4, 12);
+
+    // Blink the cannon after taking a hit
+    if (this.flash <= 0 || Math.floor(this.flash * 10) % 2) {
+      const py = this.h - 50;
+      c.fillStyle = "#4cd964";
+      c.fillRect(this.x - 18, py, 36, 12);
+      c.fillRect(this.x - 4, py - 10, 8, 10);
+    }
+
+    c.fillStyle = "#4cd964";
+    c.fillRect(0, this.h - 24, this.w, 2);
+    c.font = "16px system-ui, sans-serif";
+    c.textAlign = "left";
+    c.fillText("❤️".repeat(Math.max(0, this.lives)), 10, this.h - 11);
+    c.textAlign = "right";
+    c.fillStyle = "#fff";
+    c.fillText(`Wave ${this.wave}`, this.w - 10, this.h - 11);
+    c.textBaseline = "alphabetic";
+  },
+};
+
+// Penalty Kicks: shoot when the sweeping target is where you want it
+const penalty = {
+  id: "penalty", title: "⚽ Penalty Kicks", w: 480, h: 560,
+  gx: 90, gw: 300, gy: 80, gh: 120, spot: 470,
+  controls: "Space or click to shoot · Aim for the corners · 3 misses and you're out",
+  reset() {
+    this.score = 0;
+    this.misses = 0;
+    this.t = 0;
+    this.nextKick();
+  },
+  nextKick() {
+    this.phase = "aim";
+    this.bx = this.w / 2;
+    this.by = this.spot;
+    this.kx = this.w / 2;
+    this.msg = "";
+  },
+  // The target sweeps around the goal (and a bit past the posts), faster as you score
+  aim() {
+    const sp = 1.6 + this.score * 0.12;
+    return {
+      x: this.w / 2 + Math.sin(this.t * sp) * (this.gw / 2 + 30),
+      y: this.gy + this.gh / 2 + Math.sin(this.t * sp * 1.7) * (this.gh / 2 - 12),
+    };
+  },
+  shoot() {
+    if (this.phase !== "aim") return;
+    this.target = this.aim();
+    this.phase = "shot";
+    this.flight = 0;
+    // The keeper guesses right sometimes, but can't reach tight corners
+    const guess = Math.random() < 0.25 ? this.target.x : this.gx + 60 + Math.random() * (this.gw - 120);
+    this.kTarget = clamp(guess + (Math.random() - 0.5) * 40, this.gx + 60, this.gx + this.gw - 60);
+  },
+  key(code) { if (code === "Space" || code === "Enter") this.shoot(); },
+  tap() { this.shoot(); },
+  update(dt) {
+    this.t += dt;
+    if (this.phase === "aim") {
+      this.kx = this.w / 2 + Math.sin(this.t * 2) * 30;
+    } else if (this.phase === "shot") {
+      this.flight = Math.min(1, this.flight + dt / 0.55);
+      this.bx = this.w / 2 + (this.target.x - this.w / 2) * this.flight;
+      this.by = this.spot + (this.target.y - this.spot) * this.flight;
+      this.kx += clamp(this.kTarget - this.kx, -330 * dt, 330 * dt);
+      if (this.flight >= 1) {
+        const onTarget = this.target.x > this.gx + 6 && this.target.x < this.gx + this.gw - 6;
+        if (!onTarget) this.msg = "MISSED!";
+        else if (Math.abs(this.target.x - this.kx) < 36) this.msg = "SAVED!";
+        else this.msg = "GOAL!";
+        if (this.msg === "GOAL!") this.score++; else this.misses++;
+        this.phase = "result";
+        this.wait = 1;
+      }
+    } else {
+      this.wait -= dt;
+      if (this.wait <= 0) {
+        if (this.misses >= 3) return false;
+        this.nextKick();
+      }
+    }
+    return true;
+  },
+  draw(c) {
+    for (let y = 0; y < this.h; y += 40) {
+      c.fillStyle = (y / 40) % 2 ? "#3c8d3c" : "#439a43";
+      c.fillRect(0, y, this.w, 40);
+    }
+    c.strokeStyle = "rgba(255,255,255,0.8)";
+    c.lineWidth = 3;
+    c.strokeRect(30, this.gy + this.gh, this.w - 60, 200);
+    c.beginPath(); c.arc(this.w / 2, this.spot, 4, 0, Math.PI * 2); c.fillStyle = "#fff"; c.fill();
+
+    // Goal net and posts
+    c.fillStyle = "rgba(255,255,255,0.12)";
+    c.fillRect(this.gx, this.gy, this.gw, this.gh);
+    c.strokeStyle = "rgba(255,255,255,0.3)";
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let x = this.gx; x <= this.gx + this.gw; x += 15) { c.moveTo(x, this.gy); c.lineTo(x, this.gy + this.gh); }
+    for (let y = this.gy; y <= this.gy + this.gh; y += 15) { c.moveTo(this.gx, y); c.lineTo(this.gx + this.gw, y); }
+    c.stroke();
+    c.strokeStyle = "#fff";
+    c.lineWidth = 6;
+    c.beginPath();
+    c.moveTo(this.gx, this.gy + this.gh); c.lineTo(this.gx, this.gy);
+    c.lineTo(this.gx + this.gw, this.gy); c.lineTo(this.gx + this.gw, this.gy + this.gh);
+    c.stroke();
+
+    // Keeper (arms out while diving)
+    const ky = this.gy + this.gh - 50, diving = this.phase !== "aim";
+    c.fillStyle = "#ff8c1a";
+    c.fillRect(this.kx - 14, ky, 28, 40);
+    c.fillRect(this.kx - (diving ? 36 : 22), ky + 4, diving ? 72 : 44, 8);
+    c.fillStyle = "#f1c27d";
+    c.beginPath(); c.arc(this.kx, ky - 10, 10, 0, Math.PI * 2); c.fill();
+
+    if (this.phase === "aim") {
+      const a = this.aim();
+      c.strokeStyle = "#ffcc00";
+      c.lineWidth = 3;
+      c.beginPath();
+      c.arc(a.x, a.y, 12, 0, Math.PI * 2);
+      c.moveTo(a.x - 18, a.y); c.lineTo(a.x + 18, a.y);
+      c.moveTo(a.x, a.y - 18); c.lineTo(a.x, a.y + 18);
+      c.stroke();
+    }
+
+    const r = 14 - 6 * ((this.spot - this.by) / (this.spot - this.gy));   // shrinks as it flies away
+    c.font = `${r * 2}px system-ui, sans-serif`;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillText("⚽", this.bx, this.by);
+
+    c.font = "bold 16px system-ui, sans-serif";
+    c.fillStyle = "#fff";
+    c.textAlign = "left";
+    c.fillText(`Goals: ${this.score}`, 12, 24);
+    c.textAlign = "right";
+    c.fillText(`Misses: ${"❌".repeat(this.misses)}${"⚪".repeat(Math.max(0, 3 - this.misses))}`, this.w - 12, 24);
+
+    if (this.msg) {
+      c.font = "bold 64px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.lineWidth = 6;
+      c.strokeStyle = "#000";
+      c.strokeText(this.msg, this.w / 2, this.h / 2 + 40);
+      c.fillStyle = this.msg === "GOAL!" ? "#4cd964" : "#ff9f43";
+      c.fillText(this.msg, this.w / 2, this.h / 2 + 40);
+    }
+    c.textBaseline = "alphabetic";
+  },
+};
+
+const GAMES = { dodge, stack, snake, pong, flappy, memory, invaders, penalty };
 const miniCanvas = document.getElementById("miniCanvas");
 const mctx = miniCanvas.getContext("2d");
 let mini = null;
@@ -1117,9 +1661,11 @@ function miniKey(code) {
   mini.game.key?.(code);
 }
 
-miniCanvas.addEventListener("click", () => {
-  if (mini.state !== "playing") startMini();
-  else mini.game.tap?.();
+miniCanvas.addEventListener("click", e => {
+  if (mini.state !== "playing") return startMini();
+  // Pass the click position in game coordinates (Memory Match needs it)
+  const r = miniCanvas.getBoundingClientRect(), g = mini.game;
+  g.tap?.((e.clientX - r.left) * g.w / r.width, (e.clientY - r.top) * g.h / r.height);
 });
 document.getElementById("miniBack").onclick = closeMini;
 document.querySelectorAll("[data-game]").forEach(btn => {
@@ -1155,6 +1701,7 @@ function drawMini() {
 
   if (mini.state !== "playing") {
     const cy = g.h / 2;
+    c.textBaseline = "alphabetic";
     c.fillStyle = "rgba(0,0,0,0.6)";
     c.fillRect(0, 0, g.w, g.h);
     c.textAlign = "center";
@@ -1167,7 +1714,7 @@ function drawMini() {
       c.fillText("Press Space or click to start", g.w / 2, cy + 20);
     } else {
       c.font = "bold 40px system-ui, sans-serif";
-      c.fillText("Game Over", g.w / 2, cy - 40);
+      c.fillText(g.endText || "Game Over", g.w / 2, cy - 40);
       c.font = "22px system-ui, sans-serif";
       c.fillText(`Score ${g.score}`, g.w / 2, cy);
       if (mini.newBest) {
