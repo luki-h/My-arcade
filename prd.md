@@ -1,0 +1,3 @@
+Who plays:1-2 players on 1 device
+On screen:a racing game with car upgrades with coins that come from racing and you can earn coins based on driving acurracy and what place you're in. player1:ad for turning w for acelarate s for brake player2:left and right arrow keys for turning up arrow key for acerlerate down arrow key for brake can be played 1 player OR 2 playerand the game opens in a screen with a. lot of games but so far there is only this game witch the screen of the games opens from a button from the home screen with the jelly text 
+win or lose: 1st, 2nd, and 3rd place = win 4 and under = lose (good effort)

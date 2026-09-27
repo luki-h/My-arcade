@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Arcade – Coin Rush Racing</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #1b1e2b;
+    color: #fff;
+  }
+  .screen {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 24px;
+    text-align: center;
+  }
+  .screen[hidden] { display: none; }
+  h1 { font-size: 3em; margin: 0; }
+  h2 { margin: 0; }
+  p { margin: 0; color: #c8cbe0; }
+  a { color: #ffcc00; }
+
+  button {
+    font: inherit;
+    font-weight: 700;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 22px;
+    cursor: pointer;
+    background: #ffcc00;
+    color: #222;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { background: #555; color: #999; cursor: not-allowed; filter: none; }
+  button.secondary { background: #3a3f55; color: #fff; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+  /* Jelly title (same effect as the home page) */
+  .jelly span { display: inline-block; cursor: pointer; }
+  .jelly span.bounce { animation: jelly 0.8s ease; transform-origin: bottom center; }
+  @keyframes jelly {
+    0%, 100% { transform: scale(1, 1); }
+    25% { transform: scale(0.75, 1.3); }
+    40% { transform: scale(1.3, 0.75); }
+    55% { transform: scale(0.85, 1.15); }
+    70% { transform: scale(1.1, 0.9); }
+    85% { transform: scale(0.97, 1.03); }
+  }
+
+  /* Game library */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    width: 100%;
+    max-width: 860px;
+  }
+  .card {
+    background: #2a2f45;
+    border-radius: 14px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .card .icon { font-size: 3em; }
+  .card.locked { opacity: 0.45; }
+
+  /* Garage */
+  .garage {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+  .panel {
+    background: #2a2f45;
+    border-radius: 14px;
+    padding: 20px;
+    width: 100%;
+    max-width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+  }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; }
+  .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 8px; vertical-align: -1px; }
+  .coins { color: #ffcc00; font-weight: 700; }
+  .upgrade { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .upgrade small { display: block; color: #9aa0bf; }
+  .pips { letter-spacing: 2px; color: #ffcc00; }
+  .upgrade button { padding: 8px 12px; white-space: nowrap; }
+  .controls { font-size: 0.9em; color: #9aa0bf; }
+
+  /* Race */
+  #race { padding: 0; background: #111; position: relative; }
+  #quitBtn { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); padding: 6px 14px; }
+
+  /* Results */
+  .standings { list-style: none; padding: 0; margin: 0; width: 100%; max-width: 420px; }
+  .standings li {
+    display: flex;
+    justify-content: space-between;
+    background: #2a2f45;
+    margin: 6px 0;
+    padding: 10px 14px;
+    border-radius: 10px;
+  }
+  .standings li.me { outline: 2px solid #ffcc00; }
+  .verdict { font-size: 1.4em; font-weight: 800; }
+  .win { color: #4cd964; }
+  .lose { color: #ff9f43; }
+</style>
+</head>
+<body>
+
+<!-- Game library -->
+<section class="screen" id="library">
+  <h1 class="jelly" id="libTitle">My Arcade</h1>
+  <p>Pick a game to play</p>
+  <div class="cards">
+    <div class="card">
+      <div class="icon">🏎️</div>
+      <h2>Coin Rush Racing</h2>
+      <p>Race, earn coins, upgrade your car. 1–2 players.</p>
+      <button id="playRacing">Play</button>
+    </div>
+    <div class="card locked"><div class="icon">🚀</div><h2>Space Dodge</h2><p>Coming soon</p></div>
+    <div class="card locked"><div class="icon">🧱</div><h2>Block Stack</h2><p>Coming soon</p></div>
+    <div class="card locked"><div class="icon">🐍</div><h2>Snake</h2><p>Coming soon</p></div>
+  </div>
+  <a href="index.html">← Back to home</a>
+</section>
+
+<!-- Player count -->
+<section class="screen" id="mode" hidden>
+  <h1>Coin Rush Racing</h1>
+  <p>3 laps against the pack. Finish top 3 to win!<br>Earn coins for your place and for not hitting the walls.</p>
+  <div class="row">
+    <button id="onePlayer">1 Player</button>
+    <button id="twoPlayers">2 Players</button>
+  </div>
+  <p class="controls">P1: W accelerate · S brake · A / D steer<br>P2: ↑ accelerate · ↓ brake · ← / → steer</p>
+  <button class="secondary" id="modeBack">← Game library</button>
+</section>
+
+<!-- Garage -->
+<section class="screen" id="garage" hidden>
+  <h1>Garage</h1>
+  <p>Spend coins on upgrades, then hit the track.</p>
+  <div class="garage" id="garagePanels"></div>
+  <div class="row">
+    <button class="secondary" id="garageBack">← Back</button>
+    <button id="startRace">Start Race</button>
+  </div>
+</section>
+
+<!-- Race -->
+<section class="screen" id="race" hidden>
+  <canvas id="canvas"></canvas>
+  <button class="secondary" id="quitBtn">Quit (Esc)</button>
+</section>
+
+<!-- Results -->
+<section class="screen" id="results" hidden>
+  <h1>Race Results</h1>
+  <div class="garage" id="playerResults"></div>
+  <ol class="standings" id="standings"></ol>
+  <div class="row">
+    <button class="secondary" id="toLibrary">Game library</button>
+    <button class="secondary" id="toGarage">Garage</button>
+    <button id="raceAgain">Race Again</button>
+  </div>
+</section>
+
+<script>
+// ---------- Settings ----------
+const W = 1200, H = 800;          // world size
+const HW = 45;                    // half track width
+const LAPS = 3;
+const TOTAL_CARS = 6;
+const MAX_LVL = 5;
+const PLACE_COINS = [100, 75, 50, 30, 20, 10];
+const ACCURACY_COINS = 50;        // max bonus for never touching a wall
+const SAVE_KEY = "myArcadeRacerSave";
+
+const PLAYERS = [
+  { id: "p1", name: "P1", color: "#ff3b3b",
+    keys: { left: "KeyA", right: "KeyD", up: "KeyW", down: "KeyS" },
+    controls: "W accelerate · S brake · A / D steer" },
+  { id: "p2", name: "P2", color: "#2f8cff",
+    keys: { left: "ArrowLeft", right: "ArrowRight", up: "ArrowUp", down: "ArrowDown" },
+    controls: "↑ accelerate · ↓ brake · ← / → steer" },
+];
+const AI_DEFS = [
+  { name: "Bolt", color: "#ffd21f" },
+  { name: "Zippy", color: "#2ecc71" },
+  { name: "Dash", color: "#b057ff" },
+  { name: "Nitro", color: "#ff8c1a" },
+  { name: "Blaze", color: "#1fd6d6" },
+];
+const UPGRADES = [
+  { key: "speed", name: "Engine", desc: "Higher top speed" },
+  { key: "accel", name: "Turbo", desc: "Faster acceleration" },
+  { key: "handling", name: "Tires", desc: "Sharper turning" },
+];
+const upgradeCost = lvl => 60 + 40 * lvl;
+
+// ---------- Save data ----------
+function blankPlayer() { return { coins: 0, up: { speed: 0, accel: 0, handling: 0 } }; }
+function loadSave() {
+  try {
+    const d = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (d && d.p1 && d.p2) return d;
+  } catch (e) {}
+  return { p1: blankPlayer(), p2: blankPlayer() };
+}
+function saveGame() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
+}
+let save = loadSave();
+let numPlayers = 1;
+
+// ---------- Screens ----------
+function show(id) {
+  document.querySelectorAll(".screen").forEach(s => s.hidden = s.id !== id);
+}
+
+function makeJelly(el) {
+  const letters = el.textContent.split("");
+  el.textContent = "";
+  letters.forEach((letter, i) => {
+    const span = document.createElement("span");
+    span.textContent = letter === " " ? " " : letter;
+    span.style.color = `hsl(${(i / letters.length) * 300}, 90%, 60%)`;
+    span.addEventListener("click", () => {
+      span.classList.remove("bounce");
+      void span.offsetWidth;
+      span.classList.add("bounce");
+    });
+    el.appendChild(span);
+  });
+}
+makeJelly(document.getElementById("libTitle"));
+
+document.getElementById("playRacing").onclick = () => show("mode");
+document.getElementById("modeBack").onclick = () => show("library");
+document.getElementById("onePlayer").onclick = () => { numPlayers = 1; openGarage(); };
+document.getElementById("twoPlayers").onclick = () => { numPlayers = 2; openGarage(); };
+document.getElementById("garageBack").onclick = () => show("mode");
+document.getElementById("startRace").onclick = startRace;
+document.getElementById("quitBtn").onclick = quitRace;
+document.getElementById("toLibrary").onclick = () => show("library");
+document.getElementById("toGarage").onclick = openGarage;
+document.getElementById("raceAgain").onclick = startRace;
+
+// ---------- Garage ----------
+function openGarage() {
+  renderGarage();
+  show("garage");
+}
+
+function renderGarage() {
+  const wrap = document.getElementById("garagePanels");
+  wrap.innerHTML = "";
+  PLAYERS.slice(0, numPlayers).forEach(p => {
+    const data = save[p.id];
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.innerHTML = `
+      <div class="panel-head">
+        <h2><span class="swatch" style="background:${p.color}"></span>${p.name}</h2>
+        <span class="coins">🪙 ${data.coins}</span>
+      </div>
+      <div class="controls">${p.controls}</div>`;
+    UPGRADES.forEach(u => {
+      const lvl = data.up[u.key];
+      const row = document.createElement("div");
+      row.className = "upgrade";
+      const pips = "■".repeat(lvl) + "□".repeat(MAX_LVL - lvl);
+      row.innerHTML = `<div>${u.name} <span class="pips">${pips}</span><small>${u.desc}</small></div>`;
+      const btn = document.createElement("button");
+      if (lvl >= MAX_LVL) {
+        btn.textContent = "MAX";
+        btn.disabled = true;
+      } else {
+        const cost = upgradeCost(lvl);
+        btn.textContent = `Upgrade 🪙 ${cost}`;
+        btn.disabled = data.coins < cost;
+        btn.onclick = () => {
+          data.coins -= cost;
+          data.up[u.key]++;
+          saveGame();
+          renderGarage();
+        };
+      }
+      row.appendChild(btn);
+      panel.appendChild(row);
+    });
+    wrap.appendChild(panel);
+  });
+}
+
+// ---------- Track ----------
+const CTRL = [
+  [150, 420], [155, 300], [250, 150], [450, 130], [550, 250], [500, 400],
+  [620, 490], [790, 420], [850, 220], [1000, 130], [1110, 260], [1080, 560],
+  [950, 690], [620, 700], [330, 700], [170, 640], [150, 560],
+];
+
+function catmull(p0, p1, p2, p3, t) {
+  const t2 = t * t, t3 = t2 * t;
+  const f = k => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t +
+    (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 +
+    (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3);
+  return [f(0), f(1)];
+}
+
+function buildTrack(step) {
+  const n = CTRL.length, dense = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = CTRL[(i - 1 + n) % n], p1 = CTRL[i], p2 = CTRL[(i + 1) % n], p3 = CTRL[(i + 2) % n];
+    for (let s = 0; s < 20; s++) dense.push(catmull(p0, p1, p2, p3, s / 20));
+  }
+  // Resample to evenly spaced points
+  const cum = [0];
+  for (let i = 0; i < dense.length; i++) {
+    const a = dense[i], b = dense[(i + 1) % dense.length];
+    cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const total = cum[cum.length - 1];
+  const count = Math.round(total / step);
+  const out = [];
+  let seg = 0;
+  for (let k = 0; k < count; k++) {
+    const d = (k * total) / count;
+    while (cum[seg + 1] < d) seg++;
+    const a = dense[seg], b = dense[(seg + 1) % dense.length];
+    const t = (d - cum[seg]) / (cum[seg + 1] - cum[seg]);
+    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+  }
+  return out;
+}
+
+const PTS = buildTrack(8);
+const N = PTS.length;
+const ANG = PTS.map((p, i) => {
+  const q = PTS[(i + 1) % N];
+  return Math.atan2(q[1] - p[1], q[0] - p[0]);
+});
+
+// Nearest track point, searching only near the car's last known point.
+function nearest(x, y, guess, range) {
+  let best = guess, bd = Infinity;
+  for (let o = -range; o <= range; o++) {
+    const i = (guess + o + N) % N;
+    const dx = PTS[i][0] - x, dy = PTS[i][1] - y;
+    const d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return { i: best, d: Math.sqrt(bd) };
+}
+
+// ---------- Helpers ----------
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+const ordinal = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+const fmtTime = t => {
+  const m = Math.floor(t / 60), s = (t % 60).toFixed(2).padStart(5, "0");
+  return `${m}:${s}`;
+};
+
+// ---------- Input ----------
+const keys = {};
+addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
+  if (e.code === "Escape" && race) quitRace();
+});
+addEventListener("keyup", e => { keys[e.code] = false; });
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+
+// ---------- Race ----------
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let scale = 1;
+let race = null;
+
+function resize() {
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  const dpr = devicePixelRatio || 1;
+  canvas.style.width = W * s + "px";
+  canvas.style.height = H * s + "px";
+  canvas.width = Math.round(W * s * dpr);
+  canvas.height = Math.round(H * s * dpr);
+  scale = s * dpr;
+}
+addEventListener("resize", resize);
+
+function makeCar(def, slot) {
+  const row = Math.floor(slot / 2), side = slot % 2;
+  const back = 5 + row * 7 + side * 3;
+  const i = (N - back) % N;
+  const lat = side ? 22 : -22;
+  return {
+    ...def,
+    x: PTS[i][0] - Math.sin(ANG[i]) * lat,
+    y: PTS[i][1] + Math.cos(ANG[i]) * lat,
+    angle: ANG[i],
+    speed: 0,
+    idx: i,
+    total: i - N,        // progress in track points; negative = behind the start line
+    onTrack: true,
+    finished: false,
+    finishTime: 0,
+    finishOrder: 0,
+    driveTime: 0,
+    onTrackTime: 0,
+    stuck: 0,
+    reverseTime: 0,
+    lane: (Math.random() - 0.5) * 40,
+    phase: Math.random() * 10,
+  };
+}
+
+function startRace() {
+  const cars = [];
+  const ais = AI_DEFS.slice(0, TOTAL_CARS - numPlayers);
+  const humans = PLAYERS.slice(0, numPlayers).map(p => {
+    const up = save[p.id].up;
+    return {
+      name: p.name, color: p.color, human: true, pid: p.id, keys: p.keys,
+      maxSpeed: 250 + 22 * up.speed,
+      accel: 170 + 30 * up.accel,
+      turn: 2.7 + 0.25 * up.handling,
+    };
+  });
+  const aiCars = ais.map(a => ({
+    name: a.name, color: a.color, human: false,
+    maxSpeed: 220 + Math.random() * 45,
+    accel: 165 + Math.random() * 35,
+    turn: 3.2,
+  }));
+  // Grid: two AI up front, players in row two, the rest behind
+  const order = [aiCars[0], aiCars[1], ...humans, ...aiCars.slice(2)];
+  order.forEach((def, slot) => cars.push(makeCar(def, slot)));
+
+  race = { cars, state: "countdown", countdown: 3, time: 0, finishCount: 0, endTimer: 0, last: performance.now() };
+  show("race");
+  resize();
+  requestAnimationFrame(loop);
+}
+
+function quitRace() {
+  race = null;
+  openGarage();
+}
+
+function loop(now) {
+  if (!race) return;
+  const dt = Math.min(0.033, (now - race.last) / 1000);
+  race.last = now;
+  update(dt);
+  if (!race) return;
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function humanInput(car) {
+  const k = car.keys;
+  return {
+    steer: (keys[k.right] ? 1 : 0) - (keys[k.left] ? 1 : 0),
+    up: !!keys[k.up],
+    down: !!keys[k.down],
+  };
+}
+
+function aiInput(car, dt) {
+  const look = Math.round(6 + Math.abs(car.speed) / 35);
+  const ti = (car.idx + look) % N;
+  const lane = car.lane + Math.sin(race.time * 0.7 + car.phase) * 8;
+  const tx = PTS[ti][0] - Math.sin(ANG[ti]) * lane;
+  const ty = PTS[ti][1] + Math.cos(ANG[ti]) * lane;
+  const diff = wrapAngle(Math.atan2(ty - car.y, tx - car.x) - car.angle);
+  const steer = clamp(diff * 2.5, -1, 1);
+
+  const curve = Math.abs(wrapAngle(ANG[(car.idx + 22) % N] - ANG[car.idx]));
+  const target = car.maxSpeed * (1 - Math.min(0.45, curve * 0.55));
+
+  // Back up if stuck against something
+  if (Math.abs(car.speed) < 15) car.stuck += dt; else car.stuck = 0;
+  if (car.stuck > 1.2) { car.reverseTime = 0.8; car.stuck = 0; }
+  if (car.reverseTime > 0) {
+    car.reverseTime -= dt;
+    return { steer: -steer, up: false, down: true };
+  }
+  return { steer, up: car.speed < target, down: car.speed > target + 25 };
+}
+
+function drive(car, input, dt) {
+  const max = car.onTrack ? car.maxSpeed : car.maxSpeed * 0.6;   // scraping a wall slows you
+  if (input.up) {
+    car.speed += car.accel * dt;
+  } else if (input.down) {
+    car.speed -= (car.speed > 0 ? 420 : car.accel * 0.6) * dt;
+  } else {
+    const drag = 90 * dt;
+    car.speed = Math.abs(car.speed) <= drag ? 0 : car.speed - Math.sign(car.speed) * drag;
+  }
+  if (car.speed > max) car.speed = Math.max(max, car.speed - 500 * dt);
+  car.speed = Math.max(car.speed, -car.maxSpeed * 0.35);
+
+  const turnFactor = clamp(Math.abs(car.speed) / 100, 0, 1);
+  car.angle += input.steer * car.turn * turnFactor * dt * (car.speed < 0 ? -1 : 1);
+  car.x += Math.cos(car.angle) * car.speed * dt;
+  car.y += Math.sin(car.angle) * car.speed * dt;
+
+  // Keep inside the screen
+  if (car.x < 15 || car.x > W - 15 || car.y < 15 || car.y > H - 15) {
+    car.x = clamp(car.x, 15, W - 15);
+    car.y = clamp(car.y, 15, H - 15);
+    car.speed *= 0.5;
+  }
+}
+
+function update(dt) {
+  const r = race;
+  if (r.state === "countdown") {
+    r.countdown -= dt;
+    if (r.countdown <= 0) r.state = "racing";
+    return;
+  }
+  r.time += dt;
+
+  for (const car of r.cars) {
+    // Finished players get driven home automatically
+    const input = car.human && !car.finished ? humanInput(car) : aiInput(car, dt);
+    drive(car, input, dt);
+
+    const n = nearest(car.x, car.y, car.idx, 40);
+    let d = n.i - car.idx;
+    if (d > N / 2) d -= N;
+    if (d < -N / 2) d += N;
+    car.idx = n.i;
+    car.total += d;
+
+    // Walls: push the car back inside the track and slow it down
+    const limit = HW - 10;
+    car.onTrack = n.d <= limit;
+    if (!car.onTrack) {
+      const p = PTS[n.i];
+      const k = limit / n.d;
+      car.x = p[0] + (car.x - p[0]) * k;
+      car.y = p[1] + (car.y - p[1]) * k;
+      car.speed *= 0.97;
+    }
+
+    if (!car.finished) {
+      car.driveTime += dt;
+      if (car.onTrack) car.onTrackTime += dt;
+      if (car.total >= LAPS * N) {
+        car.finished = true;
+        car.finishTime = r.time;
+        car.finishOrder = ++r.finishCount;
+      }
+    }
+  }
+
+  // Bump cars apart (finished cars are ghosts)
+  const active = r.cars.filter(c => !c.finished);
+  for (let i = 0; i < active.length; i++) {
+    for (let j = i + 1; j < active.length; j++) {
+      const a = active[i], b = active[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0 && dist < 26) {
+        const push = (26 - dist) / 2, nx = dx / dist, ny = dy / dist;
+        a.x -= nx * push; a.y -= ny * push;
+        b.x += nx * push; b.y += ny * push;
+        a.speed *= 0.97; b.speed *= 0.97;
+      }
+    }
+  }
+
+  // Race positions
+  ranking().forEach((c, i) => c.place = i + 1);
+
+  if (r.cars.filter(c => c.human).every(c => c.finished)) {
+    r.endTimer += dt;
+    if (r.endTimer > 2) finishRace();
+  }
+}
+
+function ranking() {
+  return [...race.cars].sort((a, b) => {
+    if (a.finished && b.finished) return a.finishOrder - b.finishOrder;
+    if (a.finished !== b.finished) return a.finished ? -1 : 1;
+    return b.total - a.total;
+  });
+}
+
+// ---------- Drawing ----------
+function tracePath() {
+  ctx.beginPath();
+  PTS.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+  ctx.closePath();
+}
+
+function drawTrack() {
+  // Grass
+  ctx.fillStyle = "#3c8d3c";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#379037";
+  for (let x = 0; x < W; x += 80) ctx.fillRect(x, 0, 40, H);
+
+  ctx.lineJoin = "round";
+  // Curbs
+  tracePath();
+  ctx.lineWidth = HW * 2 + 12;
+  ctx.strokeStyle = "#fff";
+  ctx.stroke();
+  ctx.setLineDash([16, 16]);
+  ctx.strokeStyle = "#d33";
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Asphalt
+  ctx.lineWidth = HW * 2;
+  ctx.strokeStyle = "#555a60";
+  ctx.stroke();
+  // Center line
+  ctx.lineWidth = 2;
+  ctx.setLineDash([14, 14]);
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Checkered start/finish line
+  ctx.save();
+  ctx.translate(PTS[0][0], PTS[0][1]);
+  ctx.rotate(ANG[0]);
+  const sq = 10;
+  for (let row = 0; row < 2; row++) {
+    for (let k = 0; k < (HW * 2) / sq; k++) {
+      ctx.fillStyle = (row + k) % 2 ? "#111" : "#fff";
+      ctx.fillRect(-sq + row * sq, -HW + k * sq, sq, sq);
+    }
+  }
+  ctx.restore();
+}
+
+function drawCar(car) {
+  ctx.save();
+  ctx.translate(car.x, car.y);
+  ctx.rotate(car.angle);
+  // Wheels
+  ctx.fillStyle = "#111";
+  ctx.fillRect(-11, -11, 8, 4);
+  ctx.fillRect(5, -11, 8, 4);
+  ctx.fillRect(-11, 7, 8, 4);
+  ctx.fillRect(5, 7, 8, 4);
+  // Body
+  ctx.fillStyle = car.color;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-15, -9, 30, 18, 5); else ctx.rect(-15, -9, 30, 18);
+  ctx.fill();
+  // Windshield
+  ctx.fillStyle = "rgba(20,30,50,0.8)";
+  ctx.fillRect(2, -6, 6, 12);
+  ctx.restore();
+
+  if (car.human) {
+    ctx.font = "bold 13px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#000";
+    ctx.strokeText(car.name, car.x, car.y - 18);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(car.name, car.x, car.y - 18);
+  }
+}
+
+function drawHud(car, x) {
+  const w = 230, h = 70;
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillRect(x, 10, w, h);
+  ctx.fillStyle = car.color;
+  ctx.fillRect(x, 10, 6, h);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 18px system-ui, sans-serif";
+  if (car.finished) {
+    ctx.fillText(`${car.name}  FINISHED ${ordinal(car.finishOrder)}!`, x + 16, 36);
+    ctx.font = "14px system-ui, sans-serif";
+    ctx.fillText(`Time ${fmtTime(car.finishTime)}`, x + 16, 62);
+    return;
+  }
+  const lap = clamp(Math.floor(car.total / N) + 1, 1, LAPS);
+  ctx.fillText(`${car.name}  ${ordinal(car.place || 1)} / ${race.cars.length}`, x + 16, 36);
+  ctx.font = "14px system-ui, sans-serif";
+  ctx.fillText(`Lap ${lap}/${LAPS}`, x + 16, 62);
+  const acc = car.driveTime ? Math.round((car.onTrackTime / car.driveTime) * 100) : 100;
+  ctx.fillText(`Accuracy ${acc}%`, x + 90, 62);
+  if (!car.onTrack) {
+    ctx.fillStyle = "#ff9f43";
+    ctx.fillText("WALL!", x + 170, 36);
+  }
+}
+
+function draw() {
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  drawTrack();
+  // Draw cars back-to-front so players are on top
+  [...race.cars].sort((a, b) => a.human - b.human).forEach(drawCar);
+
+  const humans = race.cars.filter(c => c.human);
+  humans.forEach((c, i) => drawHud(c, i === 0 ? 10 : W - 240));
+
+  if (race.state === "countdown" || race.time < 0.8) {
+    const text = race.state === "countdown" ? String(Math.ceil(race.countdown)) : "GO!";
+    ctx.font = "bold 120px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = "#000";
+    ctx.strokeText(text, W / 2, H / 2 + 40);
+    ctx.fillStyle = text === "GO!" ? "#4cd964" : "#ffcc00";
+    ctx.fillText(text, W / 2, H / 2 + 40);
+  }
+}
+
+// ---------- Results ----------
+function finishRace() {
+  const order = ranking();
+  race = null;
+
+  const resultsWrap = document.getElementById("playerResults");
+  resultsWrap.innerHTML = "";
+  order.forEach((car, i) => {
+    if (!car.human) return;
+    const place = i + 1;
+    const acc = car.driveTime ? car.onTrackTime / car.driveTime : 1;
+    const placeCoins = PLACE_COINS[i] || 0;
+    const accCoins = Math.round(acc * ACCURACY_COINS);
+    const earned = placeCoins + accCoins;
+    save[car.pid].coins += earned;
+
+    const won = place <= 3;
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.innerHTML = `
+      <h2><span class="swatch" style="background:${car.color}"></span>${car.name} — ${ordinal(place)} place</h2>
+      <div class="verdict ${won ? "win" : "lose"}">${won ? "🏆 You win!" : "Good effort!"}</div>
+      <div>Accuracy: ${Math.round(acc * 100)}% without touching a wall</div>
+      <div>Place bonus: <span class="coins">+${placeCoins}</span></div>
+      <div>Accuracy bonus: <span class="coins">+${accCoins}</span></div>
+      <div>Total earned: <span class="coins">🪙 +${earned}</span> (now ${save[car.pid].coins})</div>`;
+    resultsWrap.appendChild(panel);
+  });
+  saveGame();
+
+  const list = document.getElementById("standings");
+  list.innerHTML = "";
+  order.forEach((car, i) => {
+    const li = document.createElement("li");
+    if (car.human) li.className = "me";
+    li.innerHTML = `<span>${ordinal(i + 1)} &nbsp;<span class="swatch" style="background:${car.color}"></span>${car.name}</span>
+      <span>${car.finished ? fmtTime(car.finishTime) : "—"}</span>`;
+    list.appendChild(li);
+  });
+
+  show("results");
+}
+</script>
+</body>
+</html>
