@@ -1161,6 +1161,13 @@ const pong = {
     this.vy = Math.sin(a);
     this.speed = 320;
     this.wait = 0.8;
+    this.rollCpuError();
+  },
+  // The CPU is bad on purpose: each time the ball heads its way it aims at the wrong spot
+  // (only about 1 in 7 times does it aim close enough to have a real chance)
+  rollCpuError() {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    this.cpuError = Math.random() < 0.15 ? side * Math.random() * 30 : side * (50 + Math.random() * 70);
   },
   // Where the ball hits the paddle decides the bounce angle
   bounce(paddleY, dir) {
@@ -1168,12 +1175,19 @@ const pong = {
     this.vx = Math.cos(off) * dir;
     this.vy = Math.sin(off);
     this.speed = Math.min(this.speed * 1.06, 800);
+    if (dir > 0) this.rollCpuError();
   },
   update(dt) {
     const mv = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
     this.py = clamp(this.py + mv * 380 * dt, 0, this.h - this.ph);
-    const aim = this.by - this.ph / 2;
-    this.cy = clamp(this.cy + clamp(aim - this.cy, -250 * dt, 250 * dt), 0, this.h - this.ph);
+    // Very slow, only wakes up once the ball crosses the middle, and aims badly
+    const coming = this.vx > 0 && this.bx > this.w / 2;
+    let err = this.cpuError;
+    const wrongSpot = this.by + err;
+    if (wrongSpot < this.ph / 2 || wrongSpot > this.h - this.ph / 2) err = -err;   // miss on the open side, not into a wall
+    const aim = coming ? this.by - this.ph / 2 + err : (this.h - this.ph) / 2;
+    const cpuSpeed = coming ? 140 : 40;
+    this.cy = clamp(this.cy + clamp(aim - this.cy, -cpuSpeed * dt, cpuSpeed * dt), 0, this.h - this.ph);
 
     if (this.wait > 0) { this.wait -= dt; return true; }
     this.bx += this.vx * this.speed * dt;
