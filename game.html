@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
   body {
@@ -24,7 +27,12 @@
     text-align: center;
   }
   .screen[hidden] { display: none; }
-  h1 { font-size: 3em; margin: 0; }
+  h1 {
+    font-family: "Pacifico", cursive;
+    font-weight: normal;   /* Pacifico only comes in one weight; faking bold smudges it */
+    font-size: 3em;
+    margin: 0;
+  }
   h2 { margin: 0; }
   p { margin: 0; color: #c8cbe0; }
   a { color: #ffcc00; }
@@ -224,6 +232,12 @@
       <h2>Dino Run</h2>
       <p>Jump over cacti and duck under birds.</p>
       <button data-game="dino">Play</button>
+    </div>
+    <div class="card">
+      <div class="icon">🏰</div>
+      <h2>Tower Defense</h2>
+      <p>Build and upgrade towers to stop 20 waves of monsters reaching your castle.</p>
+      <button data-game="td">Play</button>
     </div>
   </div>
   <a href="index.html">← Back to home</a>
@@ -2397,7 +2411,866 @@ const dino = {
   },
 };
 
-const GAMES = { dodge, stack, snake, pong, flappy, memory, invaders, penalty, tetris, 2048: g2048, breakout, mines, ttt, dino };
+// Tower Defense: build towers beside the road and stop 20 waves reaching the castle
+const TD_COLS = 16, TD_ROWS = 12, TD_TILE = 40, TD_TOP = 40, TD_WAVES = 20;
+const TD_PATH = [[-1, 2], [4, 2], [4, 8], [9, 8], [9, 3], [13, 3], [13, 9], [15, 9]];   // tile corners of the road
+const TD_TOWERS = [
+  { key: "archer", name: "Archer", icon: "🏹", cost: 50, dmg: 12, range: 110, rate: 0.7, speed: 460,
+    desc: "Fast arrows at one enemy. Hits flyers too." },
+  { key: "cannon", name: "Cannon", icon: "💣", cost: 100, dmg: 32, range: 100, rate: 1.6, speed: 260, splash: 48, ground: true,
+    desc: "Big blast hurts every enemy nearby. Can't hit flyers." },
+  { key: "frost", name: "Frost", icon: "❄️", cost: 80, dmg: 5, range: 95, rate: 1.0, speed: 380, slow: 0.5, magic: true,
+    desc: "Freezes enemies so they walk slower. Ignores armor." },
+  { key: "storm", name: "Storm", icon: "⚡", cost: 150, dmg: 26, range: 130, rate: 1.3, chain: 3, magic: true,
+    desc: "Lightning jumps between enemies. Ignores armor." },
+];
+const TD_ENEMIES = {
+  goblin: { name: "goblins", hp: 30, speed: 55, gold: 5, color: "#4caf50", r: 10 },
+  scout: { name: "scouts", hp: 18, speed: 100, gold: 4, color: "#ffd21f", r: 8 },
+  bat: { name: "bats", hp: 25, speed: 70, gold: 6, color: "#9b59b6", r: 9, flying: true },
+  ogre: { name: "armored ogres", hp: 120, speed: 32, gold: 12, color: "#7f8c8d", r: 14, armor: 4 },
+  shaman: { name: "healing shamans", hp: 50, speed: 45, gold: 10, color: "#ff7eb6", r: 10, heals: true },
+  boss: { name: "OGRE KING", hp: 600, speed: 26, gold: 80, color: "#c0392b", r: 20, armor: 6, lives: 5 },
+};
+const TD_MODES = { first: "First", strong: "Strongest", close: "Closest" };
+const TD_UI = {
+  shop: i => ({ x: 648, y: 48 + i * 60, w: 144, h: 54 }),
+  target: { x: 648, y: 384, w: 144, h: 26 },
+  upgrade: { x: 648, y: 414, w: 144, h: 26 },
+  sell: { x: 648, y: 444, w: 144, h: 26 },
+  wave: { x: 648, y: 482, w: 144, h: 34 },
+  speed: { x: 648, y: 522, w: 144, h: 30 },
+};
+const tdCenter = (col, row) => [col * TD_TILE + TD_TILE / 2, TD_TOP + row * TD_TILE + TD_TILE / 2];
+const inRect = (x, y, r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+function roundBox(c, x, y, w, h, r) {
+  c.beginPath();
+  if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h);
+}
+
+const td = {
+  id: "td", title: "🏰 Tower Defense", w: 800, h: 560,
+  controls: "Pick a tower (or 1–4), click grass to build · Click a tower to upgrade (U) / sell (X) · Space: next wave · F: 2× speed",
+
+  // ----- Setup -----
+  buildMap() {
+    this.road = new Set();
+    for (let i = 0; i < TD_PATH.length - 1; i++) {
+      let [col, row] = TD_PATH[i];
+      const [c2, r2] = TD_PATH[i + 1];
+      for (;;) {
+        if (col >= 0 && col < TD_COLS) this.road.add(row * TD_COLS + col);
+        if (col === c2 && row === r2) break;
+        col += Math.sign(c2 - col);
+        row += Math.sign(r2 - row);
+      }
+    }
+    this.pts = TD_PATH.map(([col, row]) => tdCenter(col, row));
+
+    // Same scenery every game (seeded random)
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    this.tiles = [];
+    for (let i = 0; i < TD_COLS * TD_ROWS; i++) {
+      const v = rnd();
+      const kind = this.road.has(i) ? null : v < 0.1 ? "tree" : v < 0.15 ? "rock" : v < 0.3 ? "flowers" : null;
+      this.tiles.push({ kind, block: kind === "tree" || kind === "rock", shade: rnd(), ox: rnd(), oy: rnd() });
+    }
+  },
+  reset() {
+    if (!this.pts) this.buildMap();
+    this.gold = 150;
+    this.lives = 20;
+    this.score = 0;
+    this.wave = 0;
+    this.time = 0;
+    this.enemies = [];
+    this.towers = [];
+    this.shots = [];
+    this.fx = [];
+    this.queue = [];
+    this.spawnT = 0;
+    this.placing = null;
+    this.sel = null;
+    this.fast = false;
+    this.paid = true;
+    this.won = false;
+    this.msg = null;
+    this.hurtT = 0;
+    this.mx = this.my = -1;
+    this.nextId = 0;
+    this.endText = "";
+    this.nextWave = this.makeWave(1);
+  },
+
+  // ----- Waves -----
+  makeWave(n) {
+    const pool = ["goblin"];
+    if (n >= 3) pool.push("scout");
+    if (n >= 4) pool.push("bat");
+    if (n >= 6) pool.push("ogre");
+    if (n >= 8) pool.push("shaman");
+    const list = Array.from({ length: 6 + n * 2 }, () => pool[randInt(pool.length)]);
+    if (n % 5 === 0) list.push("boss");
+    return list;
+  },
+  startWave() {
+    if (this.wave >= TD_WAVES) return;
+    if (this.queue.length || this.enemies.length) {
+      this.gold += 15;
+      this.say("Called the next wave early: +15 gold", "#ffcc00");
+    }
+    this.wave++;
+    this.queue.push(...this.nextWave.map(type => ({ type, wave: this.wave })));
+    if (this.nextWave.includes("boss")) this.say("⚠️ The Ogre King is coming!", "#ff3b3b");
+    this.nextWave = this.wave < TD_WAVES ? this.makeWave(this.wave + 1) : [];
+    this.paid = false;
+  },
+  spawn(item) {
+    const d = TD_ENEMIES[item.type];
+    const hp = Math.round(d.hp * Math.pow(1.12, item.wave - 1));
+    this.enemies.push({
+      ...d, type: item.type, hp, maxHp: hp, x: this.pts[0][0], y: this.pts[0][1],
+      seg: 0, progress: 0, slow: 1, slowT: 0, hitT: 0, angle: 0, id: this.nextId++,
+    });
+  },
+
+  // ----- Towers -----
+  stats(t) {
+    const d = t.def, k = t.level - 1;
+    return {
+      dmg: d.dmg * Math.pow(1.5, k),
+      range: d.range * (1 + 0.12 * k),
+      rate: d.rate * Math.pow(0.85, k),
+      slow: d.slow ? d.slow - 0.08 * k : 0,
+      chain: d.chain ? d.chain + k : 0,
+    };
+  },
+  upgradeCost(t) { return Math.round(t.def.cost * 0.8 * t.level); },
+  sellValue(t) { return Math.floor(t.spent * 0.7); },
+  towerAt(col, row) { return this.towers.find(t => t.col === col && t.row === row); },
+  canBuild(col, row) {
+    const i = row * TD_COLS + col;
+    if (this.road.has(i)) return "You can't build on the road!";
+    if (this.tiles[i].block) return "A tree or rock is in the way.";
+    if (this.towerAt(col, row)) return "There's already a tower here.";
+    return "";
+  },
+  build(col, row) {
+    const def = this.placing, problem = this.canBuild(col, row);
+    if (problem) return this.say(problem, "#ff9f43");
+    if (this.gold < def.cost) return this.say("Not enough gold!", "#ff3b3b");
+    this.gold -= def.cost;
+    const [x, y] = tdCenter(col, row);
+    this.towers.push({ def, col, row, x, y, level: 1, spent: def.cost, cd: 0, angle: -Math.PI / 2, mode: "first", kills: 0 });
+    this.fx.push({ type: "ring", x, y, r: 26, color: "#fff", t: 0, life: 0.3 });
+    if (!keys.ShiftLeft && !keys.ShiftRight) this.placing = null;   // hold Shift to keep building
+  },
+  upgrade() {
+    const t = this.sel;
+    if (!t) return;
+    if (t.level >= 3) return this.say("This tower is already max level.", "#ff9f43");
+    const cost = this.upgradeCost(t);
+    if (this.gold < cost) return this.say("Not enough gold to upgrade!", "#ff3b3b");
+    this.gold -= cost;
+    t.spent += cost;
+    t.level++;
+    this.fx.push({ type: "ring", x: t.x, y: t.y, r: 30, color: "#ffcc00", t: 0, life: 0.4 });
+    this.fx.push({ type: "text", x: t.x, y: t.y - 20, text: "LEVEL UP!", color: "#ffcc00", t: 0, life: 0.9 });
+  },
+  sell() {
+    const t = this.sel;
+    if (!t) return;
+    const value = this.sellValue(t);
+    this.gold += value;
+    this.towers = this.towers.filter(o => o !== t);
+    this.fx.push({ type: "text", x: t.x, y: t.y - 10, text: `+${value}`, color: "#ffcc00", t: 0, life: 0.9 });
+    this.sel = null;
+  },
+  cycleMode() {
+    if (!this.sel) return;
+    const order = Object.keys(TD_MODES);
+    this.sel.mode = order[(order.indexOf(this.sel.mode) + 1) % order.length];
+  },
+  pick(t, s) {
+    let best = null, bestV = -Infinity;
+    for (const e of this.enemies) {
+      if (e.dead || (e.flying && t.def.ground)) continue;
+      const d = Math.hypot(e.x - t.x, e.y - t.y);
+      if (d > s.range) continue;
+      const v = t.mode === "first" ? e.progress : t.mode === "strong" ? e.hp : -d;
+      if (v > bestV) { bestV = v; best = e; }
+    }
+    return best;
+  },
+  fire(t, s, e) {
+    t.cd = s.rate;
+    if (t.def.key !== "storm") {
+      this.shots.push({ kind: t.def.key, x: t.x, y: t.y, target: e, tx: e.x, ty: e.y, speed: t.def.speed,
+        dmg: s.dmg, splash: t.def.splash, slow: s.slow, from: t, angle: t.angle });
+      return;
+    }
+    // Chain lightning: each jump goes to the nearest new enemy and does a bit less damage
+    const hit = [e], pts = [[t.x, t.y - 8], [e.x, e.y]];
+    let last = e, dmg = s.dmg;
+    this.damage(e, dmg, t);
+    while (hit.length < s.chain) {
+      let next = null, nd = 90;
+      for (const o of this.enemies) {
+        if (o.dead || hit.includes(o)) continue;
+        const d = Math.hypot(o.x - last.x, o.y - last.y);
+        if (d < nd) { nd = d; next = o; }
+      }
+      if (!next) break;
+      dmg *= 0.8;
+      hit.push(next);
+      pts.push([next.x, next.y]);
+      this.damage(next, dmg, t);
+      last = next;
+    }
+    this.fx.push({ type: "bolt", pts, t: 0, life: 0.18 });
+  },
+  damage(e, dmg, tower) {
+    if (e.dead) return;
+    e.hp -= tower.def.magic ? dmg : Math.max(1, dmg - (e.armor || 0));   // armor blocks some of every normal hit
+    e.hitT = 0.08;
+    if (e.hp > 0) return;
+    e.dead = true;
+    this.gold += e.gold;
+    this.score += e.gold * 10;
+    tower.kills++;
+    this.fx.push({ type: "text", x: e.x, y: e.y - 12, text: `+${e.gold}`, color: "#ffcc00", t: 0, life: 0.9 });
+    for (let i = 0; i < (e.type === "boss" ? 24 : 8); i++) {
+      const a = Math.random() * Math.PI * 2, sp = 40 + Math.random() * 90;
+      this.fx.push({ type: "spark", x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, color: e.color, t: 0, life: 0.5 });
+    }
+  },
+  impact(s) {
+    if (s.kind === "cannon") {
+      for (const e of this.enemies) {
+        if (!e.flying && Math.hypot(e.x - s.tx, e.y - s.ty) < s.splash) this.damage(e, s.dmg, s.from);
+      }
+      this.fx.push({ type: "ring", x: s.tx, y: s.ty, r: s.splash, color: "#ff9f43", t: 0, life: 0.35, fill: true });
+      return;
+    }
+    if (s.target.dead) return;
+    this.damage(s.target, s.dmg, s.from);
+    if (s.kind === "frost") {
+      const e = s.target;
+      e.slow = e.slowT > 0 ? Math.min(e.slow, s.slow) : s.slow;
+      e.slowT = 1.6;
+      this.fx.push({ type: "ring", x: e.x, y: e.y, r: 16, color: "#b3e5fc", t: 0, life: 0.25 });
+    }
+  },
+  say(text, color) { this.msg = { text, color, t: 2.5 }; },
+
+  // ----- Input -----
+  choose(def) {
+    this.placing = this.placing === def ? null : def;
+    this.sel = null;
+  },
+  key(code) {
+    const n = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(code);
+    if (n >= 0) this.choose(TD_TOWERS[n]);
+    if (code === "Space") this.startWave();
+    if (code === "KeyF") this.fast = !this.fast;
+    if (code === "KeyU") this.upgrade();
+    if (code === "KeyX" || code === "Delete" || code === "Backspace") this.sell();
+    if (code === "KeyT") this.cycleMode();
+  },
+  pointer(x, y) { this.mx = x; this.my = y; },
+  tap(x, y, alt) {
+    if (alt) { this.placing = null; this.sel = null; return; }   // right-click cancels
+    if (x >= TD_COLS * TD_TILE) {
+      TD_TOWERS.forEach((d, i) => { if (inRect(x, y, TD_UI.shop(i))) this.choose(d); });
+      if (this.sel && inRect(x, y, TD_UI.target)) this.cycleMode();
+      if (this.sel && inRect(x, y, TD_UI.upgrade)) this.upgrade();
+      if (this.sel && inRect(x, y, TD_UI.sell)) this.sell();
+      if (inRect(x, y, TD_UI.wave)) this.startWave();
+      if (inRect(x, y, TD_UI.speed)) this.fast = !this.fast;
+      return;
+    }
+    const col = Math.floor(x / TD_TILE), row = Math.floor((y - TD_TOP) / TD_TILE);
+    if (row < 0 || row >= TD_ROWS || col < 0 || col >= TD_COLS) return;
+    const t = this.towerAt(col, row);
+    if (t) { this.sel = t; this.placing = null; return; }
+    if (this.placing) this.build(col, row); else this.sel = null;
+  },
+
+  // ----- Game loop -----
+  update(dt) {
+    for (let k = 0; k < (this.fast ? 2 : 1); k++) {
+      this.step(dt);
+      if (this.lives <= 0) { this.endText = "🏰 The castle fell!"; return false; }
+      if (this.won) return false;
+    }
+    return true;
+  },
+  step(dt) {
+    this.time += dt;
+    this.hurtT -= dt;
+    if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
+
+    this.spawnT -= dt;
+    if (this.queue.length && this.spawnT <= 0) {
+      const item = this.queue.shift();
+      this.spawn(item);
+      const gap = item.type === "scout" ? 0.4 : item.type === "boss" ? 1.5 : 0.75;
+      this.spawnT = gap * Math.max(0.55, 1 - this.wave * 0.02);
+    }
+
+    for (const e of this.enemies) {
+      if (e.slowT > 0) e.slowT -= dt;
+      if (e.hitT > 0) e.hitT -= dt;
+      if (e.heals) {
+        for (const o of this.enemies) {
+          if (o !== e && !o.dead && Math.hypot(o.x - e.x, o.y - e.y) < 70) o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.05 * dt);
+        }
+      }
+      // Walk along the road, carrying leftover movement around corners
+      let move = e.speed * (e.slowT > 0 ? e.slow : 1) * dt;
+      while (move > 0 && e.seg < this.pts.length - 1) {
+        const [tx, ty] = this.pts[e.seg + 1];
+        const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy);
+        if (d > 0) e.angle = Math.atan2(dy, dx);
+        if (d <= move) {
+          e.x = tx; e.y = ty; e.seg++; move -= d; e.progress += d;
+        } else {
+          e.x += (dx / d) * move; e.y += (dy / d) * move; e.progress += move; move = 0;
+        }
+      }
+      if (e.seg >= this.pts.length - 1 && !e.dead) {
+        e.dead = true;
+        this.lives = Math.max(0, this.lives - (e.lives || 1));
+        this.hurtT = 0.4;
+      }
+    }
+
+    for (const t of this.towers) {
+      const s = this.stats(t);
+      t.cd -= dt;
+      const e = this.pick(t, s);
+      if (!e) continue;
+      t.angle = Math.atan2(e.y - t.y, e.x - t.x);
+      if (t.cd <= 0) this.fire(t, s, e);
+    }
+
+    for (const s of this.shots) {
+      if (!s.target.dead) { s.tx = s.target.x; s.ty = s.target.y; }
+      const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), stepLen = s.speed * dt;
+      s.angle = Math.atan2(dy, dx);
+      if (d <= stepLen) { s.done = true; this.impact(s); }
+      else { s.x += (dx / d) * stepLen; s.y += (dy / d) * stepLen; }
+    }
+    this.shots = this.shots.filter(s => !s.done);
+    this.enemies = this.enemies.filter(e => !e.dead);
+
+    for (const f of this.fx) {
+      f.t += dt;
+      if (f.type === "spark") { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.92; f.vy *= 0.92; }
+    }
+    this.fx = this.fx.filter(f => f.t < f.life);
+
+    // Wave cleared: pay a bonus, or win after the last wave
+    if (!this.paid && !this.queue.length && !this.enemies.length) {
+      this.paid = true;
+      if (this.wave >= TD_WAVES) {
+        this.won = true;
+        this.score += this.lives * 100;
+        this.endText = "🏆 Kingdom saved!";
+      } else {
+        const bonus = 20 + this.wave * 3;
+        this.gold += bonus;
+        this.say(`Wave ${this.wave} cleared! +${bonus} gold`, "#4cd964");
+      }
+    }
+  },
+
+  // ----- Drawing -----
+  draw(c) {
+    c.fillStyle = "#151827";
+    c.fillRect(0, 0, this.w, this.h);
+    this.drawMap(c);
+    this.drawGuides(c);
+    for (const t of this.towers) this.drawTower(c, t);
+    // Ground enemies first, flyers on top
+    for (const e of this.enemies) if (!e.flying) this.drawEnemy(c, e);
+    for (const e of this.enemies) if (e.flying) this.drawEnemy(c, e);
+    this.drawShots(c);
+    this.drawFx(c);
+    this.drawTopBar(c);
+    this.drawSidebar(c);
+    this.drawBottomBar(c);
+    c.textBaseline = "alphabetic";
+    c.globalAlpha = 1;
+  },
+  drawMap(c) {
+    const T = TD_TILE;
+    for (let row = 0; row < TD_ROWS; row++) {
+      for (let col = 0; col < TD_COLS; col++) {
+        const i = row * TD_COLS + col, tile = this.tiles[i], x = col * T, y = TD_TOP + row * T;
+        if (this.road.has(i)) {
+          c.fillStyle = "#c9a36b";
+          c.fillRect(x, y, T, T);
+          // Darker edges where the road meets grass
+          c.fillStyle = "#a8824c";
+          const isRoad = (cc, rr) => cc < 0 || cc >= TD_COLS || (rr >= 0 && rr < TD_ROWS && this.road.has(rr * TD_COLS + cc));
+          if (!isRoad(col, row - 1)) c.fillRect(x, y, T, 3);
+          if (!isRoad(col, row + 1)) c.fillRect(x, y + T - 3, T, 3);
+          if (!isRoad(col - 1, row)) c.fillRect(x, y, 3, T);
+          if (!isRoad(col + 1, row)) c.fillRect(x + T - 3, y, 3, T);
+          c.fillStyle = "#b8925b";
+          c.fillRect(x + 6 + tile.ox * 24, y + 8 + tile.oy * 20, 3, 3);
+          c.fillRect(x + 28 - tile.oy * 16, y + 26 - tile.ox * 14, 2, 2);
+        } else {
+          c.fillStyle = tile.shade < 0.5 ? "#5aa34a" : "#62ad50";
+          c.fillRect(x, y, T, T);
+          c.strokeStyle = "#4e9140";
+          c.lineWidth = 1.5;
+          const gx = x + 6 + tile.ox * 26, gy = y + 10 + tile.oy * 22;
+          c.beginPath();
+          c.moveTo(gx, gy); c.lineTo(gx - 2, gy - 5);
+          c.moveTo(gx + 3, gy); c.lineTo(gx + 4, gy - 6);
+          c.stroke();
+        }
+      }
+    }
+    for (let i = 0; i < this.tiles.length; i++) {
+      const tile = this.tiles[i];
+      if (!tile.kind) continue;
+      const [x, y] = tdCenter(i % TD_COLS, Math.floor(i / TD_COLS));
+      if (tile.kind === "tree") {
+        c.fillStyle = "rgba(0,0,0,0.2)";
+        c.beginPath(); c.ellipse(x + 3, y + 13, 14, 5, 0, 0, Math.PI * 2); c.fill();
+        c.fillStyle = "#6d4c41";
+        c.fillRect(x - 3, y + 2, 6, 12);
+        c.fillStyle = "#2e7d32";
+        for (const [ox, oy, r] of [[-7, 0, 9], [7, 0, 9], [0, -8, 11]]) { c.beginPath(); c.arc(x + ox, y + oy, r, 0, Math.PI * 2); c.fill(); }
+        c.fillStyle = "#43a047";
+        c.beginPath(); c.arc(x - 3, y - 10, 5, 0, Math.PI * 2); c.fill();
+      } else if (tile.kind === "rock") {
+        c.fillStyle = "#7b7f8a";
+        c.beginPath(); c.ellipse(x, y + 4, 14, 10, 0, 0, Math.PI * 2); c.fill();
+        c.fillStyle = "#9ea3ad";
+        c.beginPath(); c.ellipse(x - 3, y, 8, 5, -0.3, 0, Math.PI * 2); c.fill();
+      } else {
+        const colors = ["#ff7eb6", "#fff", "#ffd21f"];
+        for (let k = 0; k < 3; k++) {
+          c.fillStyle = colors[k];
+          c.beginPath(); c.arc(x - 10 + k * 9 + tile.ox * 6, y - 6 + ((k * 7 + tile.oy * 14) % 16), 2.5, 0, Math.PI * 2); c.fill();
+        }
+      }
+    }
+
+    // Cave the monsters come out of
+    const [sx, sy] = tdCenter(0, TD_PATH[0][1]);
+    c.fillStyle = "#4a3f35";
+    c.beginPath(); c.arc(sx - 20, sy, 22, -Math.PI / 2, Math.PI / 2); c.fill();
+    c.fillStyle = "#1a1410";
+    c.beginPath(); c.arc(sx - 20, sy, 15, -Math.PI / 2, Math.PI / 2); c.fill();
+
+    // Your castle at the end of the road (flashes red when hit)
+    const [cx, cy] = this.pts[this.pts.length - 1];
+    c.fillStyle = this.hurtT > 0 ? "#d9534f" : "#b0b6c3";
+    c.fillRect(cx - 18, cy - 12, 36, 28);
+    c.fillRect(cx - 22, cy - 22, 10, 38);
+    c.fillRect(cx + 12, cy - 22, 10, 38);
+    for (let k = 0; k < 3; k++) c.fillRect(cx - 12 + k * 9, cy - 17, 6, 6);
+    c.fillStyle = "#5d4037";
+    c.beginPath(); c.arc(cx, cy + 8, 7, Math.PI, 0); c.fill();
+    c.fillRect(cx - 7, cy + 8, 14, 8);
+    c.strokeStyle = "#333";
+    c.lineWidth = 2;
+    c.beginPath(); c.moveTo(cx - 17, cy - 22); c.lineTo(cx - 17, cy - 36); c.stroke();
+    c.fillStyle = "#ff3b3b";
+    const wave = Math.sin(this.time * 6) * 2;
+    c.beginPath(); c.moveTo(cx - 16, cy - 36); c.lineTo(cx - 4, cy - 32 + wave); c.lineTo(cx - 16, cy - 28); c.fill();
+  },
+  drawGuides(c) {
+    const ring = (x, y, r, color) => {
+      c.fillStyle = color;
+      c.strokeStyle = "rgba(255,255,255,0.6)";
+      c.lineWidth = 1.5;
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); c.stroke();
+    };
+    if (this.sel) {
+      ring(this.sel.x, this.sel.y, this.stats(this.sel).range, "rgba(255,255,255,0.1)");
+      c.strokeStyle = "#ffcc00";
+      c.lineWidth = 2;
+      c.strokeRect(this.sel.col * TD_TILE + 1, TD_TOP + this.sel.row * TD_TILE + 1, TD_TILE - 2, TD_TILE - 2);
+    }
+    const col = Math.floor(this.mx / TD_TILE), row = Math.floor((this.my - TD_TOP) / TD_TILE);
+    if (col < 0 || col >= TD_COLS || row < 0 || row >= TD_ROWS) return;
+    const x = col * TD_TILE, y = TD_TOP + row * TD_TILE;
+    if (this.placing) {
+      const ok = !this.canBuild(col, row) && this.gold >= this.placing.cost;
+      const [px, py] = tdCenter(col, row);
+      ring(px, py, this.placing.range, ok ? "rgba(76,217,100,0.15)" : "rgba(255,59,59,0.15)");
+      c.fillStyle = ok ? "rgba(76,217,100,0.45)" : "rgba(255,59,59,0.45)";
+      c.fillRect(x, y, TD_TILE, TD_TILE);
+      c.font = "22px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.globalAlpha = 0.8;
+      c.fillText(this.placing.icon, px, py);
+      c.globalAlpha = 1;
+    } else {
+      c.strokeStyle = "rgba(255,255,255,0.35)";
+      c.lineWidth = 1;
+      c.strokeRect(x + 0.5, y + 0.5, TD_TILE - 1, TD_TILE - 1);
+    }
+  },
+  drawTower(c, t) {
+    const { x, y } = t, s = this.stats(t);
+    const kick = Math.max(0, t.cd - (s.rate - 0.12)) / 0.12;   // 1 right after firing, then 0
+    c.fillStyle = "rgba(0,0,0,0.25)";
+    c.fillRect(x - 15, y - 13, 34, 32);
+    c.fillStyle = "#8a8f9c";
+    roundBox(c, x - 17, y - 17, 34, 34, 6); c.fill();
+    c.strokeStyle = "#5d6170";
+    c.lineWidth = 2;
+    c.stroke();
+    c.fillStyle = "#a3a8b5";
+    c.fillRect(x - 13, y - 13, 26, 4);
+
+    c.save();
+    c.translate(x, y);
+    if (t.def.key === "archer") {
+      c.fillStyle = "#8d6e63";
+      c.beginPath(); c.arc(0, 0, 11, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = "#5d4037"; c.lineWidth = 2; c.stroke();
+      c.rotate(t.angle);
+      c.strokeStyle = "#3e2723";
+      c.lineWidth = 3;
+      c.beginPath(); c.arc(-2, 0, 10, -1.1, 1.1); c.stroke();
+      c.strokeStyle = "#eee";
+      c.lineWidth = 1;
+      c.beginPath(); c.moveTo(-2 + Math.cos(-1.1) * 10, Math.sin(-1.1) * 10); c.lineTo(-6 + kick * 4, 0); c.lineTo(-2 + Math.cos(1.1) * 10, Math.sin(1.1) * 10); c.stroke();
+      if (kick < 0.5) { c.strokeStyle = "#d7ccc8"; c.lineWidth = 2; c.beginPath(); c.moveTo(-6, 0); c.lineTo(10, 0); c.stroke(); }
+    } else if (t.def.key === "cannon") {
+      c.fillStyle = "#444";
+      c.beginPath(); c.arc(0, 0, 12, 0, Math.PI * 2); c.fill();
+      c.rotate(t.angle);
+      c.fillStyle = "#222";
+      c.fillRect(-2 - kick * 5, -5, 20, 10);
+      c.fillStyle = "#555";
+      c.fillRect(15 - kick * 5, -6, 4, 12);
+      if (kick > 0.6) { c.fillStyle = "#ffcc00"; c.beginPath(); c.arc(24, 0, 5 * kick, 0, Math.PI * 2); c.fill(); }
+    } else if (t.def.key === "frost") {
+      const pulse = 0.75 + Math.sin(this.time * 4 + t.col) * 0.25;
+      c.shadowColor = "#4fc3f7";
+      c.shadowBlur = 12 * pulse;
+      c.fillStyle = "#b3e5fc";
+      c.beginPath(); c.moveTo(0, -14); c.lineTo(9, 0); c.lineTo(0, 14); c.lineTo(-9, 0); c.closePath(); c.fill();
+      c.shadowBlur = 0;
+      c.fillStyle = "#4fc3f7";
+      c.beginPath(); c.moveTo(0, -8); c.lineTo(5, 0); c.lineTo(0, 8); c.lineTo(-5, 0); c.closePath(); c.fill();
+    } else {
+      c.strokeStyle = "#cfd8dc";
+      c.lineWidth = 2;
+      for (let k = 0; k < 3; k++) { c.beginPath(); c.ellipse(0, 6 - k * 6, 9 - k, 3, 0, 0, Math.PI * 2); c.stroke(); }
+      c.shadowColor = "#b057ff";
+      c.shadowBlur = 10 + kick * 10;
+      c.fillStyle = kick > 0 ? "#f3e5ff" : "#b057ff";
+      c.beginPath(); c.arc(0, -10, 6, 0, Math.PI * 2); c.fill();
+      c.shadowBlur = 0;
+    }
+    c.restore();
+
+    c.fillStyle = "#ffcc00";
+    for (let k = 0; k < t.level; k++) { c.beginPath(); c.arc(x - 8 + k * 8, y + 14, 2.5, 0, Math.PI * 2); c.fill(); }
+  },
+  drawEnemy(c, e) {
+    const lift = e.flying ? 12 : 0;
+    const bob = e.flying ? Math.sin(this.time * 6 + e.id) * 2 : Math.abs(Math.sin(this.time * 10 + e.id)) * -2;
+    c.fillStyle = "rgba(0,0,0,0.25)";
+    c.beginPath(); c.ellipse(e.x, e.y + e.r * 0.7, e.r * (e.flying ? 0.7 : 1), e.r * 0.35, 0, 0, Math.PI * 2); c.fill();
+
+    c.save();
+    c.translate(e.x, e.y - lift + bob);
+    const r = e.r, look = Math.cos(e.angle) * r * 0.25, lookY = Math.sin(e.angle) * r * 0.2;
+
+    if (e.flying) {
+      const flap = Math.sin(this.time * 22 + e.id) * 6;
+      c.fillStyle = "#6c3483";
+      c.beginPath(); c.moveTo(-3, 0); c.lineTo(-r * 2.2, -6 + flap); c.lineTo(-r * 1.4, 4); c.lineTo(-r * 0.9, 1); c.fill();
+      c.beginPath(); c.moveTo(3, 0); c.lineTo(r * 2.2, -6 + flap); c.lineTo(r * 1.4, 4); c.lineTo(r * 0.9, 1); c.fill();
+    }
+    if (e.type === "goblin") {
+      c.fillStyle = "#388e3c";
+      c.beginPath(); c.moveTo(-r * 0.7, -r * 0.3); c.lineTo(-r * 1.5, -r * 0.8); c.lineTo(-r * 0.6, -r * 0.8); c.fill();
+      c.beginPath(); c.moveTo(r * 0.7, -r * 0.3); c.lineTo(r * 1.5, -r * 0.8); c.lineTo(r * 0.6, -r * 0.8); c.fill();
+    }
+    if (e.type === "scout") {
+      c.strokeStyle = "rgba(255,255,255,0.6)";
+      c.lineWidth = 2;
+      for (let k = -1; k <= 1; k++) {
+        const bx = -Math.cos(e.angle), by = -Math.sin(e.angle);
+        c.beginPath();
+        c.moveTo(bx * (r + 3) - by * k * 4, by * (r + 3) + bx * k * 4);
+        c.lineTo(bx * (r + 10) - by * k * 4, by * (r + 10) + bx * k * 4);
+        c.stroke();
+      }
+    }
+
+    c.fillStyle = e.color;
+    if (e.type === "ogre") { roundBox(c, -r, -r, r * 2, r * 2, 6); c.fill(); }
+    else { c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill(); }
+    c.strokeStyle = "rgba(0,0,0,0.45)";
+    c.lineWidth = 2;
+    c.stroke();
+
+    if (e.type === "ogre") {
+      c.fillStyle = "#566573";
+      c.fillRect(-r, -r, r * 2, r * 0.6);
+      c.fillStyle = "#d5dbdb";
+      for (const k of [-0.6, 0, 0.6]) { c.beginPath(); c.arc(k * r, -r * 0.7, 1.6, 0, Math.PI * 2); c.fill(); }
+    }
+    if (e.type === "shaman") {
+      c.fillStyle = "#fff";
+      c.fillRect(-2, -r * 0.6, 4, r * 1.2);
+      c.fillRect(-r * 0.6, -2, r * 1.2, 4);
+      c.strokeStyle = `rgba(76,217,100,${0.3 + Math.sin(this.time * 4) * 0.2})`;
+      c.lineWidth = 1.5;
+      c.beginPath(); c.arc(0, lift - bob, 70, 0, Math.PI * 2); c.stroke();
+    }
+    if (e.type === "boss") {
+      c.fillStyle = "#ffcc00";
+      c.beginPath();
+      c.moveTo(-r * 0.7, -r * 0.75); c.lineTo(-r * 0.7, -r * 1.35); c.lineTo(-r * 0.35, -r * 1.0);
+      c.lineTo(0, -r * 1.45); c.lineTo(r * 0.35, -r * 1.0); c.lineTo(r * 0.7, -r * 1.35); c.lineTo(r * 0.7, -r * 0.75);
+      c.fill();
+      c.fillStyle = "#f5f5f5";
+      c.beginPath(); c.moveTo(-r * 0.9, -r * 0.2); c.lineTo(-r * 1.4, -r * 0.7); c.lineTo(-r * 0.7, -r * 0.5); c.fill();
+      c.beginPath(); c.moveTo(r * 0.9, -r * 0.2); c.lineTo(r * 1.4, -r * 0.7); c.lineTo(r * 0.7, -r * 0.5); c.fill();
+    }
+    if (e.type !== "shaman") {
+      // Eyes look where it's walking
+      const ex = r * 0.35, ey = -r * 0.15, er = Math.max(2, r * 0.22);
+      for (const sx of [-1, 1]) {
+        c.fillStyle = "#fff";
+        c.beginPath(); c.arc(sx * ex, ey, er, 0, Math.PI * 2); c.fill();
+        c.fillStyle = e.type === "boss" ? "#c00" : "#111";
+        c.beginPath(); c.arc(sx * ex + look * 0.4, ey + lookY * 0.4, er * 0.55, 0, Math.PI * 2); c.fill();
+      }
+      if (e.type === "boss") {
+        c.strokeStyle = "#111";
+        c.lineWidth = 2;
+        c.beginPath(); c.moveTo(-ex - er, ey - er - 2); c.lineTo(-ex + er, ey - er + 1); c.moveTo(ex + er, ey - er - 2); c.lineTo(ex - er, ey - er + 1); c.stroke();
+      }
+    }
+
+    if (e.slowT > 0) {
+      c.fillStyle = "rgba(120,200,255,0.45)";
+      c.beginPath(); c.arc(0, 0, r + 2, 0, Math.PI * 2); c.fill();
+    }
+    if (e.hitT > 0) {
+      c.fillStyle = "rgba(255,255,255,0.6)";
+      c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+
+    if (e.hp < e.maxHp) {
+      const w = Math.max(20, r * 2 + 4), frac = Math.max(0, e.hp / e.maxHp);
+      const bx = e.x - w / 2, by = e.y - lift - r - (e.type === "boss" ? 18 : 9);
+      c.fillStyle = "#300";
+      c.fillRect(bx - 1, by - 1, w + 2, 6);
+      c.fillStyle = frac > 0.5 ? "#4cd964" : frac > 0.25 ? "#ffcc00" : "#ff3b3b";
+      c.fillRect(bx, by, w * frac, 4);
+    }
+  },
+  drawShots(c) {
+    for (const s of this.shots) {
+      c.save();
+      c.translate(s.x, s.y);
+      c.rotate(s.angle);
+      if (s.kind === "archer") {
+        c.strokeStyle = "#5d4037";
+        c.lineWidth = 2;
+        c.beginPath(); c.moveTo(-8, 0); c.lineTo(6, 0); c.stroke();
+        c.fillStyle = "#ccc";
+        c.beginPath(); c.moveTo(9, 0); c.lineTo(4, -3); c.lineTo(4, 3); c.fill();
+      } else if (s.kind === "cannon") {
+        c.fillStyle = "rgba(0,0,0,0.25)";
+        c.beginPath(); c.arc(2, 6, 5, 0, Math.PI * 2); c.fill();
+        c.fillStyle = "#111";
+        c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.fill();
+      } else {
+        c.fillStyle = "#e1f5fe";
+        c.beginPath(); c.moveTo(7, 0); c.lineTo(0, -3); c.lineTo(-7, 0); c.lineTo(0, 3); c.fill();
+      }
+      c.restore();
+    }
+  },
+  drawFx(c) {
+    for (const f of this.fx) {
+      const p = f.t / f.life;
+      c.globalAlpha = 1 - p;
+      if (f.type === "text") {
+        c.font = "bold 13px system-ui, sans-serif";
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.lineWidth = 3;
+        c.strokeStyle = "#000";
+        c.strokeText(f.text, f.x, f.y - p * 24);
+        c.fillStyle = f.color;
+        c.fillText(f.text, f.x, f.y - p * 24);
+      } else if (f.type === "spark") {
+        c.fillStyle = f.color;
+        c.beginPath(); c.arc(f.x, f.y, 3 * (1 - p) + 1, 0, Math.PI * 2); c.fill();
+      } else if (f.type === "ring") {
+        c.strokeStyle = f.color;
+        c.lineWidth = 3;
+        c.beginPath(); c.arc(f.x, f.y, f.r * (0.4 + 0.6 * p), 0, Math.PI * 2); c.stroke();
+        if (f.fill) { c.fillStyle = f.color; c.globalAlpha = (1 - p) * 0.35; c.fill(); }
+      } else if (f.type === "bolt") {
+        // Jagged lightning, re-zigzagged every frame so it flickers
+        c.beginPath();
+        c.moveTo(f.pts[0][0], f.pts[0][1]);
+        for (let k = 1; k < f.pts.length; k++) {
+          const [ax, ay] = f.pts[k - 1], [bx, by] = f.pts[k];
+          for (let j = 1; j <= 4; j++) {
+            const q = j / 4, jit = j < 4 ? 7 : 0;
+            c.lineTo(ax + (bx - ax) * q + (Math.random() - 0.5) * jit, ay + (by - ay) * q + (Math.random() - 0.5) * jit);
+          }
+        }
+        c.strokeStyle = "#d7b0ff";
+        c.lineWidth = 4;
+        c.stroke();
+        c.strokeStyle = "#fff";
+        c.lineWidth = 1.5;
+        c.stroke();
+      }
+    }
+    c.globalAlpha = 1;
+  },
+  drawButton(c, r, label, { enabled = true, primary = false, size = 13 } = {}) {
+    c.fillStyle = !enabled ? "#2a2f45" : primary ? "#ffcc00" : "#3a3f55";
+    roundBox(c, r.x, r.y, r.w, r.h, 7); c.fill();
+    c.fillStyle = !enabled ? "#6c7293" : primary ? "#222" : "#fff";
+    c.font = `bold ${size}px system-ui, sans-serif`;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 1);
+  },
+  wrapText(c, text, x, y, maxW, lineH) {
+    let line = "";
+    for (const word of text.split(" ")) {
+      const test = line ? line + " " + word : word;
+      if (c.measureText(test).width > maxW && line) { c.fillText(line, x, y); line = word; y += lineH; }
+      else line = test;
+    }
+    if (line) c.fillText(line, x, y);
+  },
+  drawTopBar(c) {
+    c.fillStyle = "#151827";
+    c.fillRect(0, 0, this.w, TD_TOP);
+    c.font = "bold 17px system-ui, sans-serif";
+    c.textBaseline = "middle";
+    c.textAlign = "left";
+    c.fillStyle = this.hurtT > 0 ? "#ff3b3b" : "#fff";
+    c.fillText(`❤️ ${this.lives}`, 12, 21);
+    c.fillStyle = "#ffcc00";
+    c.fillText(`🪙 ${this.gold}`, 96, 21);
+    c.fillStyle = "#fff";
+    c.fillText(`🌊 Wave ${this.wave}/${TD_WAVES}`, 210, 21);
+    c.fillText(`👾 ${this.enemies.length + this.queue.length} left`, 370, 21);
+    c.textAlign = "right";
+    c.fillStyle = "#c8cbe0";
+    c.fillText(`⭐ ${this.score}`, this.w - 12, 21);
+  },
+  drawSidebar(c) {
+    const left = TD_COLS * TD_TILE;
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(left, TD_TOP, this.w - left, this.h - TD_TOP);
+
+    TD_TOWERS.forEach((d, i) => {
+      const r = TD_UI.shop(i), chosen = this.placing === d;
+      c.fillStyle = chosen ? "#3d4466" : "#2a2f45";
+      roundBox(c, r.x, r.y, r.w, r.h, 8); c.fill();
+      if (chosen) { c.strokeStyle = "#ffcc00"; c.lineWidth = 2; c.stroke(); }
+      c.globalAlpha = this.gold >= d.cost ? 1 : 0.4;
+      c.textBaseline = "middle";
+      c.textAlign = "center";
+      c.font = "24px system-ui, sans-serif";
+      c.fillText(d.icon, r.x + 22, r.y + r.h / 2);
+      c.textAlign = "left";
+      c.font = "bold 14px system-ui, sans-serif";
+      c.fillStyle = "#fff";
+      c.fillText(d.name, r.x + 44, r.y + 18);
+      c.font = "13px system-ui, sans-serif";
+      c.fillStyle = "#ffcc00";
+      c.fillText(`🪙 ${d.cost}`, r.x + 44, r.y + 37);
+      c.globalAlpha = 1;
+      c.textAlign = "right";
+      c.font = "11px system-ui, sans-serif";
+      c.fillStyle = "#6c7293";
+      c.fillText(i + 1, r.x + r.w - 8, r.y + 12);
+    });
+
+    c.textAlign = "left";
+    c.textBaseline = "middle";
+    if (this.sel) {
+      const t = this.sel, s = this.stats(t);
+      c.font = "bold 15px system-ui, sans-serif";
+      c.fillStyle = "#fff";
+      c.fillText(`${t.def.icon} ${t.def.name} ${"★".repeat(t.level)}${"☆".repeat(3 - t.level)}`, 648, 304);
+      c.font = "12px system-ui, sans-serif";
+      c.fillStyle = "#c8cbe0";
+      const extra = t.def.splash ? " (splash)" : t.def.chain ? ` ×${s.chain}` : t.def.slow ? ` · slow ${Math.round((1 - s.slow) * 100)}%` : "";
+      [`Damage ${Math.round(s.dmg)}${extra}`, `Range ${Math.round(s.range)}`, `Fires every ${s.rate.toFixed(2)}s`, `Kills ${t.kills}`]
+        .forEach((line, k) => c.fillText(line, 648, 324 + k * 15));
+      this.drawButton(c, TD_UI.target, `🎯 Target: ${TD_MODES[t.mode]}`, { size: 12 });
+      const cost = this.upgradeCost(t);
+      if (t.level >= 3) this.drawButton(c, TD_UI.upgrade, "MAX LEVEL", { enabled: false, size: 12 });
+      else this.drawButton(c, TD_UI.upgrade, `⬆ Upgrade 🪙 ${cost}`, { enabled: this.gold >= cost, primary: this.gold >= cost, size: 12 });
+      this.drawButton(c, TD_UI.sell, `💰 Sell +${this.sellValue(t)}`, { size: 12 });
+    } else if (this.placing) {
+      const d = this.placing;
+      c.font = "bold 15px system-ui, sans-serif";
+      c.fillStyle = "#fff";
+      c.fillText(`${d.icon} ${d.name}`, 648, 304);
+      c.font = "12px system-ui, sans-serif";
+      c.fillStyle = "#c8cbe0";
+      this.wrapText(c, `${d.desc} Damage ${d.dmg}, range ${d.range}.`, 648, 326, 144, 15);
+    } else {
+      c.font = "12px system-ui, sans-serif";
+      c.fillStyle = "#9aa0bf";
+      this.wrapText(c, "Pick a tower above, then click the grass to build it. Click a tower you built to upgrade or sell it.", 648, 304, 144, 15);
+    }
+
+    const busy = this.queue.length || this.enemies.length;
+    if (this.wave >= TD_WAVES) this.drawButton(c, TD_UI.wave, "Final wave!", { enabled: false });
+    else if (busy) this.drawButton(c, TD_UI.wave, `▶ Wave ${this.wave + 1} early +15`, { size: 12 });
+    else this.drawButton(c, TD_UI.wave, `▶ Start wave ${this.wave + 1}`, { primary: true, size: 14 });
+    this.drawButton(c, TD_UI.speed, `⏩ Speed ${this.fast ? 2 : 1}×`, { primary: this.fast, size: 12 });
+  },
+  drawBottomBar(c) {
+    const y = TD_TOP + TD_ROWS * TD_TILE, w = TD_COLS * TD_TILE;
+    c.fillStyle = "#151827";
+    c.fillRect(0, y, w, this.h - y);
+    c.font = "14px system-ui, sans-serif";
+    c.textAlign = "left";
+    c.textBaseline = "middle";
+    let text, color = "#c8cbe0";
+    if (this.msg) {
+      text = this.msg.text;
+      color = this.msg.color;
+    } else if (this.placing) {
+      text = `Building ${this.placing.name}: click the grass · right-click to cancel · hold Shift to build more`;
+    } else if (this.nextWave.length) {
+      const counts = {};
+      for (const type of this.nextWave) counts[type] = (counts[type] || 0) + 1;
+      text = `Next (wave ${this.wave + 1}): ` + Object.entries(counts).map(([type, n]) => `${n} ${TD_ENEMIES[type].name}`).join(", ");
+    } else {
+      text = "Last wave! Hold the line!";
+    }
+    c.fillStyle = color;
+    c.fillText(text, 12, y + 20);
+  },
+};
+
+const GAMES = { dodge, stack, snake, pong, flappy, memory, invaders, penalty, tetris, 2048: g2048, breakout, mines, ttt, dino, td };
 const miniCanvas = document.getElementById("miniCanvas");
 const mctx = miniCanvas.getContext("2d");
 let mini = null;
