@@ -3332,7 +3332,7 @@ const fishRarity = f => f.weight >= 12 ? ["Common", "#c8cbe0"] : f.weight >= 6 ?
 
 const fishing = {
   id: "fishing", title: "🎣 Island Fishing", w: 800, h: 560,
-  controls: "Arrows / WASD to sail & walk · Space or click: cast, then catch when a fish bites · E: go ashore, collect, board · 1–3: craft on land",
+  controls: "Arrows / WASD to sail & walk · Space or click: cast (from your boat or the beach), then catch when a fish bites · E: go ashore, collect, board · 1–3: craft on land",
 
   // ----- World setup -----
   setupWorld() {
@@ -3397,6 +3397,7 @@ const fishing = {
     this.banner = s ? { text: "Welcome back, captain!", t: 2.5 } : { text: "Set sail, captain!", t: 2.5 };
     this.near = null;
     this.island = null;
+    this.fromLand = false;
     for (const isl of this.islands) for (const n of isl.list) { n.ready = true; n.regrow = 0; }
   },
   persist() {
@@ -3425,8 +3426,11 @@ const fishing = {
   action() {
     if (this.mode === "sail") this.cast();
     else if (this.mode === "bite") this.catchFish();   // one click and it's yours!
-    else if (this.mode === "caught") this.mode = "sail";
-    else if (this.mode === "walk") this.interact();
+    else if (this.mode === "caught") this.doneFishing();
+    else if (this.mode === "walk") {
+      if (this.nearNode || this.nearBoat || !this.nearShore) this.interact();
+      else this.castFromLand();
+    }
   },
   // E: land, collect, board
   interact() {
@@ -3435,7 +3439,7 @@ const fishing = {
       // Collect first: a collected thing goes away for a while, so the next press boards
       if (this.nearNode) this.gather(this.nearNode);
       else if (this.nearBoat) this.board();
-    } else if (this.mode === "caught") this.mode = "sail";
+    } else if (this.mode === "caught") this.doneFishing();
   },
   say(text, color = "#fff") { this.msg = { text, color, t: 2.5 }; },
   popup(x, y, text, color = "#ffcc00") { this.fx.push({ type: "text", x, y, text, color, t: 0, life: 1.1 }); },
@@ -3453,6 +3457,21 @@ const fishing = {
     this.mode = "cast";
     this.castT = 0;
     this.bobber = { x: tx, y: ty };
+  },
+  // Fishing from the beach: cast straight out to sea from where you stand
+  castFromLand() {
+    const isl = this.island, a = Math.atan2(this.py - isl.y, this.px - isl.x);
+    const r = this.shoreR(isl, a) + 55;
+    const tx = isl.x + Math.cos(a) * r, ty = isl.y + Math.sin(a) * r;
+    if (!this.isWater(tx, ty)) return this.say("Try a different spot on the beach to cast!", "#ff9f43");
+    this.fromLand = true;
+    this.mode = "cast";
+    this.castT = 0;
+    this.bobber = { x: tx, y: ty };
+  },
+  doneFishing() {
+    this.mode = this.fromLand ? "walk" : "sail";
+    this.fromLand = false;
   },
   pickFish(x, y) {
     const { isl, d } = this.nearestIsland(x, y);
@@ -3514,7 +3533,7 @@ const fishing = {
     this.persist();
   },
   craft(i) {
-    if (this.mode !== "walk") return this.say("Go ashore on an island to craft upgrades.", "#ff9f43");
+    if (!this.island) return this.say("Go ashore on an island to craft upgrades.", "#ff9f43");
     const u = FISHING_UPGRADES[i], lvl = this.up[u.key];
     if (lvl >= u.max) return this.say(`${u.icon} ${u.name} is already maxed out!`, "#ff9f43");
     const cost = u.cost(lvl);
@@ -3551,6 +3570,12 @@ const fishing = {
 
     if (this.mode === "walk") {
       this.walk(dt, ix, iy);
+    } else if (this.fromLand) {
+      if (moving && fishingNow) {
+        this.doneFishing();
+        this.say("You reeled your line back in.");
+      }
+      if (this.mode === "caught" && moving) this.doneFishing();
     } else {
       // Moving while waiting for a bite reels the line back in
       if (moving && (this.mode === "cast" || this.mode === "wait" || this.mode === "bite")) {
@@ -3562,7 +3587,7 @@ const fishing = {
     }
 
     if (fishingNow) this.fishStep(dt);
-    if (this.mode === "caught" && (this.card.t += dt) > 3.5) this.mode = "sail";
+    if (this.mode === "caught" && (this.card.t += dt) > 3.5) this.doneFishing();
 
     if ((this.saveT += dt) > 5) { this.saveT = 0; this.persist(); }
     return true;
@@ -3600,11 +3625,13 @@ const fishing = {
     this.px += (ix / len) * 120 * dt;
     this.py += (iy / len) * 120 * dt;
     // Stay on the island
-    const a = Math.atan2(this.py - isl.y, this.px - isl.x), max = this.shoreR(isl, a) - 8;
+    let a = Math.atan2(this.py - isl.y, this.px - isl.x), max = this.shoreR(isl, a) - 8;
     if (Math.hypot(this.px - isl.x, this.py - isl.y) > max) {
       this.px = isl.x + Math.cos(a) * max;
       this.py = isl.y + Math.sin(a) * max;
     }
+    a = Math.atan2(this.py - isl.y, this.px - isl.x);
+    this.nearShore = this.shoreR(isl, a) - Math.hypot(this.px - isl.x, this.py - isl.y) < 45;
     this.walking = ix || iy;
     if (ix) this.facing = ix;
     this.nearBoat = Math.hypot(this.px - this.x, this.py - this.y) < 75;
@@ -3644,7 +3671,8 @@ const fishing = {
 
   // ----- Drawing -----
   draw(c) {
-    const fx = this.mode === "walk" ? this.px : this.x, fy = this.mode === "walk" ? this.py : this.y;
+    const onFoot = this.mode === "walk" || this.fromLand;
+    const fx = onFoot ? this.px : this.x, fy = onFoot ? this.py : this.y;
     const camX = clamp(fx - this.w / 2, 0, SEA_W - this.w), camY = clamp(fy - this.h / 2, 0, SEA_H - this.h);
     this.cam = [camX, camY];
 
@@ -3663,7 +3691,7 @@ const fishing = {
     }
     this.drawBoat(c);
     if (["cast", "wait", "bite", "caught"].includes(this.mode)) this.drawLine(c);
-    if (this.mode === "walk") this.drawPlayer(c);
+    if (this.mode === "walk" || this.fromLand) this.drawPlayer(c);
     this.drawFx(c);
     c.restore();
 
@@ -3798,7 +3826,7 @@ const fishing = {
     c.beginPath(); c.arc(4, 0, 3, 0, Math.PI * 2); c.fill();
 
     // You, sitting in the back (unless you're walking on an island)
-    if (this.mode !== "walk") {
+    if (this.mode !== "walk" && !this.fromLand) {
       c.fillStyle = "#ff7043";
       c.beginPath(); c.arc(-10, 0, 6, 0, Math.PI * 2); c.fill();
       c.fillStyle = "#e8c170";
@@ -3809,12 +3837,18 @@ const fishing = {
     }
     c.restore();
   },
-  rodTip() {
-    return [this.x + Math.cos(this.heading) * 10 - Math.sin(this.heading) * 14, this.y + Math.sin(this.heading) * 10 + Math.cos(this.heading) * 14];
+  // Where the rod is held [sx, sy] and where its tip is [tx, ty]
+  rod() {
+    if (this.fromLand) {
+      const a = Math.atan2(this.bobber.y - this.py, this.bobber.x - this.px);
+      return [this.px, this.py - 4, this.px + Math.cos(a) * 22, this.py - 4 + Math.sin(a) * 22 - 10];
+    }
+    const h = this.heading;
+    return [this.x - Math.cos(h) * 10, this.y - Math.sin(h) * 10,
+      this.x + Math.cos(h) * 10 - Math.sin(h) * 14, this.y + Math.sin(h) * 10 + Math.cos(h) * 14];
   },
   drawLine(c) {
-    const [tx, ty] = this.rodTip(), b = this.bobber;
-    const sx = this.x - Math.cos(this.heading) * 10, sy = this.y - Math.sin(this.heading) * 10;
+    const [sx, sy, tx, ty] = this.rod(), b = this.bobber;
     let bx = b.x, by = b.y, lift = 0;
     if (this.mode === "cast") {
       const p = Math.min(1, this.castT / 0.45);
@@ -3976,6 +4010,7 @@ const fishing = {
       caught: "Space to keep fishing",
       walk: this.nearNode ? `Press E to collect ${RES_ICON[NODE_TYPES[this.nearNode.type].res]} ${NODE_TYPES[this.nearNode.type].res}`
         : this.nearBoat ? "Press E to get back in your boat"
+        : this.nearShore ? "Press Space or click to fish from the beach · E collects things"
         : "Walk to things and press E to collect them · Craft upgrades with 1 / 2 / 3",
     }[this.mode];
     c.font = "bold 14px system-ui, sans-serif";
