@@ -3332,7 +3332,7 @@ const fishRarity = f => f.weight >= 12 ? ["Common", "#c8cbe0"] : f.weight >= 6 ?
 
 const fishing = {
   id: "fishing", title: "🎣 Island Fishing", w: 800, h: 560,
-  controls: "Arrows / WASD to sail & walk · Space: cast, hook, hold to reel · E: go ashore, collect, board · 1–3: craft on land",
+  controls: "Arrows / WASD to sail & walk · Space or click: cast, then catch when a fish bites · E: go ashore, collect, board · 1–3: craft on land",
 
   // ----- World setup -----
   setupWorld() {
@@ -3395,7 +3395,6 @@ const fishing = {
     this.wake = [];
     this.msg = null;
     this.banner = s ? { text: "Welcome back, captain!", t: 2.5 } : { text: "Set sail, captain!", t: 2.5 };
-    this.mouseHold = false;
     this.near = null;
     this.island = null;
     for (const isl of this.islands) for (const n of isl.list) { n.ready = true; n.regrow = 0; }
@@ -3415,7 +3414,6 @@ const fishing = {
     const n = ["Digit1", "Digit2", "Digit3"].indexOf(code);
     if (n >= 0) this.craft(n);
   },
-  hold(down) { this.mouseHold = down; },
   tap(x, y) {
     if (this.mode === "walk") {
       const row = FISHING_UPGRADES.findIndex((u, i) => inRect(x, y, this.craftRow(i)));
@@ -3426,7 +3424,7 @@ const fishing = {
   // Space / click: the "main button" for whatever you're doing
   action() {
     if (this.mode === "sail") this.cast();
-    else if (this.mode === "bite") this.startReel();
+    else if (this.mode === "bite") this.catchFish();   // one click and it's yours!
     else if (this.mode === "caught") this.mode = "sail";
     else if (this.mode === "walk") this.interact();
   },
@@ -3465,13 +3463,6 @@ const fishing = {
     let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
     for (let i = 0; i < pool.length; i++) if ((roll -= weights[i]) <= 0) return pool[i];
     return pool[0];
-  },
-  startReel() {
-    const f = this.fish;
-    this.mode = "reel";
-    // Like a fishing mini-game: keep the fish inside your green zone to fill the catch meter
-    this.reel = { fishY: 0.5, target: 0.5, fishT: 0, zoneY: 0.3, zh: 0.34 - f.diff * 0.14, v: 0, progress: 0.35 };
-    this.splash(this.bobber.x, this.bobber.y, true);
   },
   catchFish() {
     const f = this.fish, isNew = !this.log[f.name];
@@ -3556,7 +3547,7 @@ const fishing = {
     const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
     const iy = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
     const moving = ix || iy;
-    const fishingNow = ["cast", "wait", "bite", "reel"].includes(this.mode);
+    const fishingNow = ["cast", "wait", "bite"].includes(this.mode);
 
     if (this.mode === "walk") {
       this.walk(dt, ix, iy);
@@ -3636,7 +3627,7 @@ const fishing = {
     } else if (this.mode === "wait") {
       if ((this.waitT -= dt) <= 0) {
         this.mode = "bite";
-        this.biteT = 0.9 + 0.1 * this.up.bait;
+        this.biteT = 2 + 0.3 * this.up.bait;   // plenty of time to click
         this.fish = this.pickFish(b.x, b.y);
         this.splash(b.x, b.y, true);
       } else if (Math.random() < dt * 0.6) {
@@ -3647,25 +3638,6 @@ const fishing = {
         this.mode = "wait";
         this.waitT = (2 + Math.random() * 3) * (1 - 0.2 * this.up.bait);
         this.say("Too slow! It swam off. Keep waiting...", "#ff9f43");
-      }
-    } else if (this.mode === "reel") {
-      const r = this.reel, f = this.fish;
-      if ((r.fishT -= dt) <= 0) {
-        r.target = Math.random();
-        r.fishT = 0.35 + Math.random() * (1.4 - f.diff);
-      }
-      const fs = 0.25 + f.diff * 1.1;
-      r.fishY += clamp(r.target - r.fishY, -fs * dt, fs * dt);
-      r.v += (keys.Space || this.mouseHold ? 2.6 : -2.2) * dt;
-      r.zoneY += r.v * dt;
-      if (r.zoneY < 0) { r.zoneY = 0; r.v = 0; }
-      if (r.zoneY > 1 - r.zh) { r.zoneY = 1 - r.zh; r.v = 0; }
-      const inside = r.fishY >= r.zoneY && r.fishY <= r.zoneY + r.zh;
-      r.progress += (inside ? 0.32 : -0.2) * dt;
-      if (r.progress >= 1) this.catchFish();
-      else if (r.progress <= 0) {
-        this.mode = "sail";
-        this.say("It got away! Good thing your rod never breaks. Cast again!", "#ff9f43");
       }
     }
   },
@@ -3690,13 +3662,12 @@ const fishing = {
       c.beginPath(); c.arc(w.x, w.y, 2 + w.t * 6, 0, Math.PI * 2); c.fill();
     }
     this.drawBoat(c);
-    if (["cast", "wait", "bite", "reel", "caught"].includes(this.mode)) this.drawLine(c);
+    if (["cast", "wait", "bite", "caught"].includes(this.mode)) this.drawLine(c);
     if (this.mode === "walk") this.drawPlayer(c);
     this.drawFx(c);
     c.restore();
 
     this.drawHud(c);
-    if (this.mode === "reel") this.drawReel(c);
     if (this.mode === "caught") this.drawCard(c);
     c.textBaseline = "alphabetic";
     c.globalAlpha = 1;
@@ -3855,9 +3826,6 @@ const fishing = {
     } else if (this.mode === "bite") {
       by += 4;
       bx += Math.sin(this.time * 40) * 2;
-    } else if (this.mode === "reel") {
-      bx += Math.sin(this.time * 25) * 3;
-      by += Math.cos(this.time * 21) * 3;
     }
     // Rod (unbreakable, of course)
     c.strokeStyle = "#6d4c41";
@@ -3868,7 +3836,7 @@ const fishing = {
     c.lineWidth = 1;
     c.beginPath();
     c.moveTo(tx, ty);
-    c.quadraticCurveTo((tx + bx) / 2, (ty + by) / 2 + (this.mode === "reel" ? 0 : 14) - lift, bx, by - lift);
+    c.quadraticCurveTo((tx + bx) / 2, (ty + by) / 2 + 14 - lift, bx, by - lift);
     c.stroke();
     c.fillStyle = "#fff";
     c.beginPath(); c.arc(bx, by - lift, 5, 0, Math.PI * 2); c.fill();
@@ -4001,11 +3969,10 @@ const fishing = {
     // Hint at the bottom
     const near = this.near && (this.visited.includes(this.near.name) ? this.near.name : "this island");
     const hint = {
-      sail: near ? `Press E to go ashore on ${near}` : "Arrows / WASD to sail · Space to cast your line",
+      sail: near ? `Press E to go ashore on ${near}` : "Arrows / WASD to sail · Space or click to cast your line",
       cast: "Casting...",
       wait: "Waiting for a bite... (move to reel your line in)",
-      bite: "❗ A bite! Press SPACE now!",
-      reel: "Hold SPACE or the mouse to lift the green bar. Keep the fish inside it!",
+      bite: "❗ A bite! Click or press SPACE to catch it!",
       caught: "Space to keep fishing",
       walk: this.nearNode ? `Press E to collect ${RES_ICON[NODE_TYPES[this.nearNode.type].res]} ${NODE_TYPES[this.nearNode.type].res}`
         : this.nearBoat ? "Press E to get back in your boat"
@@ -4038,44 +4005,6 @@ const fishing = {
       c.fillText(this.banner.text, this.w / 2, 120);
       c.globalAlpha = 1;
     }
-  },
-  drawReel(c) {
-    const r = this.reel, x = 600, top = 110, bh = 320, bottom = top + bh;
-    this.panel(c, x - 30, top - 40, 130, bh + 70);
-    c.font = "bold 13px system-ui, sans-serif";
-    c.textAlign = "center";
-    c.fillStyle = "#ffcc00";
-    c.fillText("REEL IT IN!", x + 35, top - 22);
-
-    // Water column
-    const g = c.createLinearGradient(0, top, 0, bottom);
-    g.addColorStop(0, "#4fc3f7");
-    g.addColorStop(1, "#0d3b66");
-    c.fillStyle = g;
-    roundBox(c, x, top, 40, bh, 8); c.fill();
-
-    // Your green catch zone
-    c.fillStyle = "rgba(76,217,100,0.55)";
-    c.strokeStyle = "#4cd964";
-    c.lineWidth = 2;
-    roundBox(c, x + 3, bottom - (r.zoneY + r.zh) * bh, 34, r.zh * bh, 6); c.fill(); c.stroke();
-
-    // The fish (you don't know what it is yet!)
-    const fy = bottom - r.fishY * bh, inside = r.fishY >= r.zoneY && r.fishY <= r.zoneY + r.zh;
-    c.font = "24px system-ui, sans-serif";
-    c.textBaseline = "middle";
-    c.fillText("🐟", x + 20 + Math.sin(this.time * 15) * 2, fy);
-
-    // Catch meter
-    c.fillStyle = "#2a2f45";
-    roundBox(c, x + 52, top, 14, bh, 6); c.fill();
-    c.fillStyle = inside ? "#4cd964" : "#ff9f43";
-    const ph = Math.max(0, r.progress) * bh;
-    roundBox(c, x + 52, bottom - ph, 14, ph, 6); c.fill();
-    c.font = "11px system-ui, sans-serif";
-    c.fillStyle = "#c8cbe0";
-    c.fillText("hold", x + 20, bottom + 14);
-    c.fillText("Space", x + 20, bottom + 26);
   },
   drawCard(c) {
     const { f, isNew } = this.card, [label, color] = fishRarity(f);
@@ -4183,9 +4112,6 @@ miniCanvas.addEventListener("contextmenu", e => {
 miniCanvas.addEventListener("mousemove", e => {
   if (mini.state === "playing") mini.game.pointer?.(...toGame(e));
 });
-// Holding the mouse button down (Island Fishing reels while it's held)
-miniCanvas.addEventListener("mousedown", () => { if (mini.state === "playing") mini.game.hold?.(true); });
-addEventListener("mouseup", () => { if (mini) mini.game.hold?.(false); });
 document.getElementById("miniBack").onclick = closeMini;
 document.querySelectorAll("[data-game]").forEach(btn => {
   btn.onclick = () => openMini(GAMES[btn.dataset.game]);
