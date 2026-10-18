@@ -239,6 +239,12 @@
       <p>Build and upgrade towers to stop 20 waves of monsters reaching your castle.</p>
       <button data-game="td">Play</button>
     </div>
+    <div class="card">
+      <div class="icon">🎣</div>
+      <h2>Island Fishing</h2>
+      <p>Sail from island to island, catch fish and collect resources. Your progress is saved.</p>
+      <button data-game="fishing">Play</button>
+    </div>
   </div>
   <a href="index.html">← Back to home</a>
 </section>
@@ -3270,7 +3276,837 @@ const td = {
   },
 };
 
-const GAMES = { dodge, stack, snake, pong, flappy, memory, invaders, penalty, tetris, 2048: g2048, breakout, mines, ttt, dino, td };
+// Island Fishing: sail between islands, fish with an unbreakable rod, gather resources, craft upgrades
+const SEA_W = 2400, SEA_H = 1800;
+const FISHING_SAVE_KEY = "myArcadeFishing";
+const BIOMES = {
+  tropical: { sand: "#f4dfa0", ground: "#6abf4b" },
+  forest: { sand: "#e6d49a", ground: "#3f8f3a" },
+  rocky: { sand: "#cfc6b4", ground: "#9a958c" },
+  snowy: { sand: "#dfe8ef", ground: "#ffffff" },
+  volcano: { sand: "#6b5a50", ground: "#4a3a35" },
+};
+const ISLANDS = [
+  { name: "Home Isle", biome: "tropical", x: 420, y: 420, r: 110, nodes: { palm: 3, bush: 2, reeds: 2, shell: 3 } },
+  { name: "Pine Key", biome: "forest", x: 1150, y: 300, r: 130, nodes: { pine: 6, bush: 2, reeds: 2, shell: 2 } },
+  { name: "Boulder Rock", biome: "rocky", x: 1950, y: 420, r: 100, nodes: { rock: 5, reeds: 1, shell: 3 } },
+  { name: "Coconut Cay", biome: "tropical", x: 720, y: 1080, r: 90, nodes: { palm: 4, bush: 1, shell: 3 } },
+  { name: "Ember Isle", biome: "volcano", x: 1380, y: 980, r: 125, nodes: { rock: 4, gem: 2 } },
+  { name: "Frostpeak", biome: "snowy", x: 2030, y: 1300, r: 120, nodes: { pine: 3, rock: 3, gem: 1 } },
+  { name: "Berry Bay", biome: "forest", x: 330, y: 1480, r: 105, nodes: { bush: 5, reeds: 3, shell: 2 } },
+  { name: "Shell Shoal", biome: "tropical", x: 1500, y: 1620, r: 85, nodes: { palm: 2, reeds: 1, shell: 5 } },
+];
+const NODE_TYPES = {
+  palm: { icon: "🌴", res: "coconut", size: 32 },
+  pine: { icon: "🌲", res: "wood", size: 32 },
+  bush: { icon: null, res: "berries", size: 0 },   // drawn by hand so the berries can disappear
+  reeds: { icon: "🌾", res: "fiber", size: 24 },
+  rock: { icon: "🪨", res: "stone", size: 26 },
+  shell: { icon: "🐚", res: "shells", size: 18, beach: true },
+  gem: { icon: "💎", res: "gems", size: 20 },
+};
+const RESOURCES = [["wood", "🪵"], ["stone", "🪨"], ["berries", "🫐"], ["coconut", "🥥"], ["fiber", "🌾"], ["shells", "🐚"], ["gems", "💎"]];
+const RES_ICON = Object.fromEntries(RESOURCES);
+const FISHING_UPGRADES = [
+  { key: "sails", name: "Faster Sails", icon: "⛵", max: 3, cost: l => ({ wood: 6 * (l + 1), fiber: 4 * (l + 1) }) },
+  { key: "bait", name: "Tasty Bait", icon: "🪱", max: 3, cost: l => ({ berries: 5 * (l + 1), coconut: 2 * (l + 1) }) },
+  { key: "lure", name: "Shiny Lure", icon: "✨", max: 3, cost: l => ({ stone: 6 * (l + 1), shells: 3 * (l + 1), gems: l + 1 }) },
+];
+// zones: s = shallow (near islands), m = middle, d = deep open ocean. biome = only near that kind of island.
+const FISH_TYPES = [
+  { name: "Old Boot", icon: "👢", value: 1, weight: 8, zones: "smd", diff: 0.05 },
+  { name: "Sardine", icon: "🐟", value: 5, weight: 30, zones: "sm", diff: 0.15 },
+  { name: "Crab", icon: "🦀", value: 10, weight: 14, zones: "s", diff: 0.25 },
+  { name: "Tropical Fish", icon: "🐠", value: 12, weight: 18, zones: "s", diff: 0.3 },
+  { name: "Pufferfish", icon: "🐡", value: 20, weight: 12, zones: "sm", diff: 0.45 },
+  { name: "Lobster", icon: "🦞", value: 35, weight: 7, zones: "sm", diff: 0.55 },
+  { name: "Squid", icon: "🦑", value: 30, weight: 10, zones: "md", diff: 0.5 },
+  { name: "Octopus", icon: "🐙", value: 45, weight: 7, zones: "md", diff: 0.6 },
+  { name: "Ice Cod", icon: "🐟", tint: "#b3e5fc", value: 40, weight: 10, zones: "sm", biome: "snowy", diff: 0.5 },
+  { name: "Lava Eel", icon: "🐍", tint: "#ff7043", value: 60, weight: 8, zones: "sm", biome: "volcano", diff: 0.7, rare: true },
+  { name: "Shark", icon: "🦈", value: 90, weight: 4, zones: "d", diff: 0.8, rare: true },
+  { name: "Sunken Treasure", icon: "💰", value: 150, weight: 1.5, zones: "d", diff: 0.5, rare: true },
+  { name: "Golden Fish", icon: "🐟", tint: "#ffd700", value: 250, weight: 0.6, zones: "d", diff: 0.95, rare: true },
+];
+const fishRarity = f => f.weight >= 12 ? ["Common", "#c8cbe0"] : f.weight >= 6 ? ["Uncommon", "#4cd964"] : f.weight >= 2 ? ["Rare", "#2f8cff"] : ["Legendary", "#ffd700"];
+
+const fishing = {
+  id: "fishing", title: "🎣 Island Fishing", w: 800, h: 560,
+  controls: "Arrows / WASD to sail & walk · Space: cast, hook, hold to reel · E: go ashore, collect, board · 1–3: craft on land",
+
+  // ----- World setup -----
+  setupWorld() {
+    this.islands = ISLANDS.map((isl, idx) => {
+      let seed = 1000 + idx * 7919;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      const out = { ...isl, s1: rnd() * 6.28, s2: rnd() * 6.28, list: [] };
+      for (const [type, count] of Object.entries(isl.nodes)) {
+        for (let n = 0; n < count; n++) {
+          // Try a few spots so things don't sit on top of each other
+          for (let tries = 0; tries < 30; tries++) {
+            const a = rnd() * Math.PI * 2;
+            const frac = NODE_TYPES[type].beach ? 0.86 + rnd() * 0.06 : 0.12 + rnd() * 0.55;
+            const r = this.shoreR(out, a) * frac;
+            const x = isl.x + Math.cos(a) * r, y = isl.y + Math.sin(a) * r;
+            if (out.list.every(o => Math.hypot(o.x - x, o.y - y) > 34) || tries === 29) {
+              out.list.push({ type, x, y, ready: true, regrow: 0 });
+              break;
+            }
+          }
+        }
+      }
+      return out;
+    });
+  },
+  // Wobbly coastline: radius of the island at angle a
+  shoreR(isl, a) { return isl.r * (1 + 0.1 * Math.sin(3 * a + isl.s1) + 0.06 * Math.sin(5 * a + isl.s2)); },
+  shoreDist(isl, x, y) {
+    return Math.hypot(x - isl.x, y - isl.y) - this.shoreR(isl, Math.atan2(y - isl.y, x - isl.x));
+  },
+  // How far (x, y) is from the nearest coast, and which island that is
+  nearestIsland(x, y) {
+    let best = null, bd = Infinity;
+    for (const isl of this.islands) {
+      const d = this.shoreDist(isl, x, y);
+      if (d < bd) { bd = d; best = isl; }
+    }
+    return { isl: best, d: bd };
+  },
+
+  // ----- Save / load -----
+  reset() {
+    if (!this.islands) this.setupWorld();
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(FISHING_SAVE_KEY)); } catch (e) {}
+    this.x = s?.x ?? 600;
+    this.y = s?.y ?? 430;
+    this.heading = s?.heading ?? 0;
+    this.inv = Object.fromEntries(RESOURCES.map(([k]) => [k, s?.inv?.[k] || 0]));
+    this.up = { sails: 0, bait: 0, lure: 0, ...(s?.up || {}) };
+    this.log = s?.log || {};
+    this.caught = s?.caught || 0;
+    this.visited = s?.visited || [];
+    this.score = s?.score || 0;
+    this.vx = this.vy = 0;
+    this.mode = "sail";
+    this.time = 0;
+    this.saveT = 0;
+    this.fx = [];
+    this.wake = [];
+    this.msg = null;
+    this.banner = s ? { text: "Welcome back, captain!", t: 2.5 } : { text: "Set sail, captain!", t: 2.5 };
+    this.mouseHold = false;
+    this.near = null;
+    this.island = null;
+    for (const isl of this.islands) for (const n of isl.list) { n.ready = true; n.regrow = 0; }
+  },
+  persist() {
+    if (this.mode === "walk" && !this.island) return;
+    const data = { x: this.x, y: this.y, heading: this.heading, inv: this.inv, up: this.up, log: this.log,
+      caught: this.caught, visited: this.visited, score: this.score };
+    try { localStorage.setItem(FISHING_SAVE_KEY, JSON.stringify(data)); } catch (e) {}
+  },
+  leave() { this.persist(); },
+
+  // ----- Input -----
+  key(code) {
+    if (code === "Space" || code === "Enter") this.action();
+    if (code === "KeyE") this.interact();
+    const n = ["Digit1", "Digit2", "Digit3"].indexOf(code);
+    if (n >= 0) this.craft(n);
+  },
+  hold(down) { this.mouseHold = down; },
+  tap(x, y) {
+    if (this.mode === "walk") {
+      const row = FISHING_UPGRADES.findIndex((u, i) => inRect(x, y, this.craftRow(i)));
+      if (row >= 0) return this.craft(row);
+    }
+    this.action();
+  },
+  // Space / click: the "main button" for whatever you're doing
+  action() {
+    if (this.mode === "sail") this.cast();
+    else if (this.mode === "bite") this.startReel();
+    else if (this.mode === "caught") this.mode = "sail";
+    else if (this.mode === "walk") this.interact();
+  },
+  // E: land, collect, board
+  interact() {
+    if (this.mode === "sail" && this.near) this.land(this.near);
+    else if (this.mode === "walk") {
+      // Collect first: a collected thing goes away for a while, so the next press boards
+      if (this.nearNode) this.gather(this.nearNode);
+      else if (this.nearBoat) this.board();
+    } else if (this.mode === "caught") this.mode = "sail";
+  },
+  say(text, color = "#fff") { this.msg = { text, color, t: 2.5 }; },
+  popup(x, y, text, color = "#ffcc00") { this.fx.push({ type: "text", x, y, text, color, t: 0, life: 1.1 }); },
+  splash(x, y, big) {
+    for (let k = 0; k < (big ? 3 : 1); k++) this.fx.push({ type: "ripple", x, y, t: -k * 0.15, life: 0.9 });
+  },
+
+  // ----- Fishing -----
+  isWater(x, y) {
+    return x > 20 && y > 20 && x < SEA_W - 20 && y < SEA_H - 20 && this.islands.every(isl => this.shoreDist(isl, x, y) > 6);
+  },
+  cast() {
+    const tx = this.x + Math.cos(this.heading) * 80, ty = this.y + Math.sin(this.heading) * 80;
+    if (!this.isWater(tx, ty)) return this.say("Turn toward open water to cast!", "#ff9f43");
+    this.mode = "cast";
+    this.castT = 0;
+    this.bobber = { x: tx, y: ty };
+  },
+  pickFish(x, y) {
+    const { isl, d } = this.nearestIsland(x, y);
+    const zone = d < 110 ? "s" : d < 320 ? "m" : "d";
+    const lure = this.up.lure;
+    const pool = FISH_TYPES.filter(f => f.zones.includes(zone) && (!f.biome || f.biome === isl.biome));
+    const weights = pool.map(f => f.weight * (f.rare ? 1 + lure * 0.8 : 1) * (f.name === "Old Boot" ? Math.max(0.3, 1 - lure * 0.25) : 1));
+    let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < pool.length; i++) if ((roll -= weights[i]) <= 0) return pool[i];
+    return pool[0];
+  },
+  startReel() {
+    const f = this.fish;
+    this.mode = "reel";
+    // Like a fishing mini-game: keep the fish inside your green zone to fill the catch meter
+    this.reel = { fishY: 0.5, target: 0.5, fishT: 0, zoneY: 0.3, zh: 0.34 - f.diff * 0.14, v: 0, progress: 0.35 };
+    this.splash(this.bobber.x, this.bobber.y, true);
+  },
+  catchFish() {
+    const f = this.fish, isNew = !this.log[f.name];
+    this.log[f.name] = (this.log[f.name] || 0) + 1;
+    this.caught++;
+    this.score += f.value + (isNew ? 50 : 0);
+    this.card = { f, isNew, t: 0 };
+    this.mode = "caught";
+    this.splash(this.bobber.x, this.bobber.y, true);
+    this.persist();
+  },
+
+  // ----- Islands -----
+  land(isl) {
+    const a = Math.atan2(this.y - isl.y, this.x - isl.x);
+    const r = this.shoreR(isl, a) - 16;
+    this.px = isl.x + Math.cos(a) * r;
+    this.py = isl.y + Math.sin(a) * r;
+    this.island = isl;
+    this.mode = "walk";
+    this.vx = this.vy = 0;
+    if (!this.visited.includes(isl.name)) {
+      this.visited.push(isl.name);
+      this.score += 25;
+      this.banner = { text: `🏝️ Discovered ${isl.name}!`, t: 3 };
+      this.persist();
+    } else {
+      this.banner = { text: isl.name, t: 2 };
+    }
+  },
+  board() {
+    this.mode = "sail";
+    this.island = null;
+    this.persist();
+  },
+  gather(node) {
+    const t = NODE_TYPES[node.type];
+    const amount = node.type === "gem" ? 1 : 1 + randInt(2);
+    this.inv[t.res] += amount;
+    this.score += amount * (t.res === "gems" ? 20 : 2);
+    node.ready = false;
+    node.regrow = node.type === "gem" ? 90 : 30;
+    this.popup(node.x, node.y - 20, `+${amount} ${RES_ICON[t.res]}`);
+    for (let k = 0; k < 8; k++) {
+      const a = Math.random() * Math.PI * 2, sp = 30 + Math.random() * 50;
+      this.fx.push({ type: "spark", x: node.x, y: node.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30,
+        color: node.type === "rock" ? "#ccc" : node.type === "gem" ? "#7fdbff" : "#8bc34a", t: 0, life: 0.6 });
+    }
+    this.persist();
+  },
+  craft(i) {
+    if (this.mode !== "walk") return this.say("Go ashore on an island to craft upgrades.", "#ff9f43");
+    const u = FISHING_UPGRADES[i], lvl = this.up[u.key];
+    if (lvl >= u.max) return this.say(`${u.icon} ${u.name} is already maxed out!`, "#ff9f43");
+    const cost = u.cost(lvl);
+    const missing = Object.entries(cost).filter(([k, v]) => this.inv[k] < v);
+    if (missing.length) return this.say(`Need more ${missing.map(([k, v]) => `${RES_ICON[k]} (${this.inv[k]}/${v})`).join(" ")}`, "#ff3b3b");
+    for (const [k, v] of Object.entries(cost)) this.inv[k] -= v;
+    this.up[u.key]++;
+    this.score += 30;
+    this.say(`${u.icon} ${u.name} upgraded to level ${lvl + 1}!`, "#4cd964");
+    this.popup(this.px, this.py - 24, "UPGRADE!", "#4cd964");
+    this.persist();
+  },
+
+  // ----- Update -----
+  update(dt) {
+    this.time += dt;
+    if (this.msg && (this.msg.t -= dt) <= 0) this.msg = null;
+    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+    for (const f of this.fx) {
+      f.t += dt;
+      if (f.type === "spark") { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 120 * dt; }
+    }
+    this.fx = this.fx.filter(f => f.t < f.life);
+    for (const w of this.wake) w.t += dt;
+    this.wake = this.wake.filter(w => w.t < 1.2);
+    for (const isl of this.islands) {
+      for (const n of isl.list) if (!n.ready && (n.regrow -= dt) <= 0) n.ready = true;
+    }
+
+    const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    const iy = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+    const moving = ix || iy;
+    const fishingNow = ["cast", "wait", "bite", "reel"].includes(this.mode);
+
+    if (this.mode === "walk") {
+      this.walk(dt, ix, iy);
+    } else {
+      // Moving while waiting for a bite reels the line back in
+      if (moving && (this.mode === "cast" || this.mode === "wait" || this.mode === "bite")) {
+        this.mode = "sail";
+        this.say("You reeled your line back in.");
+      }
+      if (this.mode === "caught" && moving) this.mode = "sail";
+      this.sail(dt, this.mode === "sail" ? ix : 0, this.mode === "sail" ? iy : 0);
+    }
+
+    if (fishingNow) this.fishStep(dt);
+    if (this.mode === "caught" && (this.card.t += dt) > 3.5) this.mode = "sail";
+
+    if ((this.saveT += dt) > 5) { this.saveT = 0; this.persist(); }
+    return true;
+  },
+  sail(dt, ix, iy) {
+    const speed = 150 + this.up.sails * 35, len = Math.hypot(ix, iy) || 1;
+    const ease = Math.min(1, dt * (ix || iy ? 1.8 : 1.2));
+    this.vx += ((ix / len) * speed - this.vx) * ease;
+    this.vy += ((iy / len) * speed - this.vy) * ease;
+    this.x = clamp(this.x + this.vx * dt, 40, SEA_W - 40);
+    this.y = clamp(this.y + this.vy * dt, 40, SEA_H - 40);
+    const spd = Math.hypot(this.vx, this.vy);
+    if (spd > 5) this.heading += wrapAngle(Math.atan2(this.vy, this.vx) - this.heading) * Math.min(1, dt * 5);
+
+    // Bump off the islands
+    for (const isl of this.islands) {
+      const a = Math.atan2(this.y - isl.y, this.x - isl.x), min = this.shoreR(isl, a) + 16;
+      if (Math.hypot(this.x - isl.x, this.y - isl.y) < min) {
+        this.x = isl.x + Math.cos(a) * min;
+        this.y = isl.y + Math.sin(a) * min;
+        this.vx *= 0.5;
+        this.vy *= 0.5;
+      }
+    }
+    if (spd > 40 && Math.random() < spd / 400) {
+      const side = (Math.random() - 0.5) * 14;
+      this.wake.push({ x: this.x - Math.cos(this.heading) * 22 - Math.sin(this.heading) * side,
+        y: this.y - Math.sin(this.heading) * 22 + Math.cos(this.heading) * side, t: 0 });
+    }
+    const { isl, d } = this.nearestIsland(this.x, this.y);
+    this.near = this.mode === "sail" && d < 36 ? isl : null;
+  },
+  walk(dt, ix, iy) {
+    const isl = this.island, len = Math.hypot(ix, iy) || 1;
+    this.px += (ix / len) * 120 * dt;
+    this.py += (iy / len) * 120 * dt;
+    // Stay on the island
+    const a = Math.atan2(this.py - isl.y, this.px - isl.x), max = this.shoreR(isl, a) - 8;
+    if (Math.hypot(this.px - isl.x, this.py - isl.y) > max) {
+      this.px = isl.x + Math.cos(a) * max;
+      this.py = isl.y + Math.sin(a) * max;
+    }
+    this.walking = ix || iy;
+    if (ix) this.facing = ix;
+    this.nearBoat = Math.hypot(this.px - this.x, this.py - this.y) < 75;
+    this.nearNode = null;
+    let bd = 34;
+    for (const n of isl.list) {
+      const d = Math.hypot(n.x - this.px, n.y - this.py);
+      if (n.ready && d < bd) { bd = d; this.nearNode = n; }
+    }
+  },
+  fishStep(dt) {
+    const b = this.bobber;
+    if (this.mode === "cast") {
+      this.castT += dt;
+      if (this.castT >= 0.45) {
+        this.mode = "wait";
+        this.waitT = (2 + Math.random() * 4) * (1 - 0.2 * this.up.bait);
+        this.splash(b.x, b.y, false);
+      }
+    } else if (this.mode === "wait") {
+      if ((this.waitT -= dt) <= 0) {
+        this.mode = "bite";
+        this.biteT = 0.9 + 0.1 * this.up.bait;
+        this.fish = this.pickFish(b.x, b.y);
+        this.splash(b.x, b.y, true);
+      } else if (Math.random() < dt * 0.6) {
+        this.splash(b.x + (Math.random() - 0.5) * 30, b.y + (Math.random() - 0.5) * 30, false);   // fish nibbling nearby
+      }
+    } else if (this.mode === "bite") {
+      if ((this.biteT -= dt) <= 0) {
+        this.mode = "wait";
+        this.waitT = (2 + Math.random() * 3) * (1 - 0.2 * this.up.bait);
+        this.say("Too slow! It swam off. Keep waiting...", "#ff9f43");
+      }
+    } else if (this.mode === "reel") {
+      const r = this.reel, f = this.fish;
+      if ((r.fishT -= dt) <= 0) {
+        r.target = Math.random();
+        r.fishT = 0.35 + Math.random() * (1.4 - f.diff);
+      }
+      const fs = 0.25 + f.diff * 1.1;
+      r.fishY += clamp(r.target - r.fishY, -fs * dt, fs * dt);
+      r.v += (keys.Space || this.mouseHold ? 2.6 : -2.2) * dt;
+      r.zoneY += r.v * dt;
+      if (r.zoneY < 0) { r.zoneY = 0; r.v = 0; }
+      if (r.zoneY > 1 - r.zh) { r.zoneY = 1 - r.zh; r.v = 0; }
+      const inside = r.fishY >= r.zoneY && r.fishY <= r.zoneY + r.zh;
+      r.progress += (inside ? 0.32 : -0.2) * dt;
+      if (r.progress >= 1) this.catchFish();
+      else if (r.progress <= 0) {
+        this.mode = "sail";
+        this.say("It got away! Good thing your rod never breaks. Cast again!", "#ff9f43");
+      }
+    }
+  },
+
+  // ----- Drawing -----
+  draw(c) {
+    const fx = this.mode === "walk" ? this.px : this.x, fy = this.mode === "walk" ? this.py : this.y;
+    const camX = clamp(fx - this.w / 2, 0, SEA_W - this.w), camY = clamp(fy - this.h / 2, 0, SEA_H - this.h);
+    this.cam = [camX, camY];
+
+    c.fillStyle = "#1e6aa8";
+    c.fillRect(0, 0, this.w, this.h);
+    c.save();
+    c.translate(-camX, -camY);
+    this.drawWaves(c, camX, camY);
+    for (const isl of this.islands) {
+      if (isl.x + isl.r + 90 < camX || isl.x - isl.r - 90 > camX + this.w || isl.y + isl.r + 90 < camY || isl.y - isl.r - 90 > camY + this.h) continue;
+      this.drawIsland(c, isl);
+    }
+    for (const w of this.wake) {
+      c.fillStyle = `rgba(255,255,255,${0.5 * (1 - w.t / 1.2)})`;
+      c.beginPath(); c.arc(w.x, w.y, 2 + w.t * 6, 0, Math.PI * 2); c.fill();
+    }
+    this.drawBoat(c);
+    if (["cast", "wait", "bite", "reel", "caught"].includes(this.mode)) this.drawLine(c);
+    if (this.mode === "walk") this.drawPlayer(c);
+    this.drawFx(c);
+    c.restore();
+
+    this.drawHud(c);
+    if (this.mode === "reel") this.drawReel(c);
+    if (this.mode === "caught") this.drawCard(c);
+    c.textBaseline = "alphabetic";
+    c.globalAlpha = 1;
+  },
+  drawWaves(c, camX, camY) {
+    const g = 70;
+    c.strokeStyle = "rgba(255,255,255,0.18)";
+    c.lineWidth = 2;
+    for (let gx = Math.floor(camX / g) * g; gx < camX + this.w + g; gx += g) {
+      for (let gy = Math.floor(camY / g) * g; gy < camY + this.h + g; gy += g) {
+        const h = (((gx * 73856093) ^ (gy * 19349663)) >>> 0) % 1000 / 1000;
+        if (h > 0.45) continue;
+        const ox = Math.sin(this.time * 0.8 + h * 20) * 8;
+        c.beginPath();
+        c.arc(gx + h * 40 + ox, gy + h * 30, 7, Math.PI * 1.15, Math.PI * 1.85);
+        c.stroke();
+      }
+    }
+  },
+  islandPath(c, isl, frac, extra) {
+    c.beginPath();
+    for (let k = 0; k <= 48; k++) {
+      const a = (k / 48) * Math.PI * 2, r = this.shoreR(isl, a) * frac + extra;
+      const x = isl.x + Math.cos(a) * r, y = isl.y + Math.sin(a) * r;
+      if (k) c.lineTo(x, y); else c.moveTo(x, y);
+    }
+    c.closePath();
+  },
+  drawIsland(c, isl) {
+    const b = BIOMES[isl.biome];
+    c.fillStyle = "rgba(80,190,215,0.35)";
+    this.islandPath(c, isl, 1, 60); c.fill();
+    c.fillStyle = "rgba(120,215,225,0.5)";
+    this.islandPath(c, isl, 1, 26); c.fill();
+    c.strokeStyle = "rgba(255,255,255,0.55)";
+    c.lineWidth = 3;
+    this.islandPath(c, isl, 1, 5 + Math.sin(this.time * 2 + isl.s1) * 2); c.stroke();
+    c.fillStyle = b.sand;
+    this.islandPath(c, isl, 1, 0); c.fill();
+    c.fillStyle = b.ground;
+    this.islandPath(c, isl, 0.8, 0); c.fill();
+
+    if (isl.biome === "volcano") {
+      const glow = 0.6 + Math.sin(this.time * 3) * 0.2;
+      c.fillStyle = "#2b211e";
+      c.beginPath(); c.arc(isl.x, isl.y, isl.r * 0.32, 0, Math.PI * 2); c.fill();
+      c.fillStyle = `rgba(255,112,67,${glow})`;
+      c.beginPath(); c.arc(isl.x, isl.y, isl.r * 0.18, 0, Math.PI * 2); c.fill();
+      c.fillStyle = `rgba(255,204,0,${glow})`;
+      c.beginPath(); c.arc(isl.x, isl.y, isl.r * 0.08, 0, Math.PI * 2); c.fill();
+    }
+    if (isl.biome === "snowy") {
+      c.fillStyle = "rgba(179,229,252,0.5)";
+      c.beginPath(); c.ellipse(isl.x - isl.r * 0.3, isl.y + isl.r * 0.2, 18, 9, 0.4, 0, Math.PI * 2); c.fill();
+    }
+
+    // Resources, back to front
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    for (const n of [...isl.list].sort((a, b) => a.y - b.y)) {
+      const t = NODE_TYPES[n.type];
+      c.globalAlpha = n.ready ? 1 : 0.3;
+      c.fillStyle = "rgba(0,0,0,0.2)";
+      c.beginPath(); c.ellipse(n.x, n.y + 10, 11, 4, 0, 0, Math.PI * 2); c.fill();
+      if (n.type === "bush") {
+        c.fillStyle = "#2e7d32";
+        for (const [ox, oy, r] of [[-6, 2, 8], [6, 2, 8], [0, -5, 9]]) { c.beginPath(); c.arc(n.x + ox, n.y + oy, r, 0, Math.PI * 2); c.fill(); }
+        if (n.ready) {
+          c.fillStyle = "#5c6bc0";
+          for (const [ox, oy] of [[-5, -2], [4, -6], [6, 3], [-1, 4], [-7, 5]]) { c.beginPath(); c.arc(n.x + ox, n.y + oy, 2.5, 0, Math.PI * 2); c.fill(); }
+        }
+      } else {
+        c.font = `${t.size}px system-ui, sans-serif`;
+        c.fillText(t.icon, n.x, n.y - t.size * 0.2);
+      }
+      if (n === this.nearNode) {
+        c.globalAlpha = 0.6 + Math.sin(this.time * 6) * 0.3;
+        c.strokeStyle = "#ffcc00";
+        c.lineWidth = 2;
+        c.beginPath(); c.arc(n.x, n.y, 18, 0, Math.PI * 2); c.stroke();
+      }
+    }
+    c.globalAlpha = 1;
+
+    const known = this.visited.includes(isl.name);
+    c.font = "bold 14px system-ui, sans-serif";
+    c.lineWidth = 3;
+    c.strokeStyle = "rgba(0,0,0,0.6)";
+    const ly = isl.y - this.shoreR(isl, -Math.PI / 2) - 22;
+    c.strokeText(known ? isl.name : "???", isl.x, ly);
+    c.fillStyle = known ? "#fff" : "#c8cbe0";
+    c.fillText(known ? isl.name : "???", isl.x, ly);
+  },
+  drawBoat(c) {
+    const bob = Math.sin(this.time * 2) * 1.5, sway = Math.sin(this.time * 1.3) * 0.04;
+    c.save();
+    c.translate(this.x, this.y + bob);
+    c.rotate(this.heading + sway);
+    c.fillStyle = "rgba(0,0,0,0.2)";
+    c.beginPath(); c.ellipse(2, 4, 26, 12, 0, 0, Math.PI * 2); c.fill();
+    // Hull and deck
+    c.fillStyle = "#8d5a2b";
+    c.beginPath();
+    c.moveTo(28, 0); c.quadraticCurveTo(14, -14, -20, -12); c.lineTo(-22, 12); c.quadraticCurveTo(14, 14, 28, 0);
+    c.fill();
+    c.strokeStyle = "#5d3a1a";
+    c.lineWidth = 2;
+    c.stroke();
+    c.fillStyle = "#b07a45";
+    c.beginPath();
+    c.moveTo(21, 0); c.quadraticCurveTo(10, -9, -16, -8); c.lineTo(-17, 8); c.quadraticCurveTo(10, 9, 21, 0);
+    c.fill();
+    c.strokeStyle = "#8d5a2b";
+    c.lineWidth = 1;
+    for (const px of [-8, 0, 8]) { c.beginPath(); c.moveTo(px, -8); c.lineTo(px, 8); c.stroke(); }
+
+    // Sail fills out more the faster you go
+    const fill = 4 + Math.min(10, Math.hypot(this.vx, this.vy) / 15);
+    c.fillStyle = ["#fafafa", "#fff3e0", "#e3f2fd", "#fff8e1"][this.up.sails];
+    c.beginPath(); c.moveTo(4, -18); c.quadraticCurveTo(4 + fill * 2, 0, 4, 18); c.closePath(); c.fill();
+    c.strokeStyle = "#bdbdbd";
+    c.stroke();
+    if (this.up.sails > 0) {
+      c.fillStyle = ["", "#ff7043", "#2f8cff", "#ffcc00"][this.up.sails];
+      c.beginPath(); c.moveTo(4, -5); c.quadraticCurveTo(4 + fill * 1.9, 0, 4, 5); c.closePath(); c.fill();
+    }
+    c.fillStyle = "#5d3a1a";
+    c.beginPath(); c.arc(4, 0, 3, 0, Math.PI * 2); c.fill();
+
+    // You, sitting in the back (unless you're walking on an island)
+    if (this.mode !== "walk") {
+      c.fillStyle = "#ff7043";
+      c.beginPath(); c.arc(-10, 0, 6, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#e8c170";
+      c.beginPath(); c.arc(-10, 0, 5.5, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = "#a1887f";
+      c.lineWidth = 1.5;
+      c.beginPath(); c.arc(-10, 0, 3, 0, Math.PI * 2); c.stroke();
+    }
+    c.restore();
+  },
+  rodTip() {
+    return [this.x + Math.cos(this.heading) * 10 - Math.sin(this.heading) * 14, this.y + Math.sin(this.heading) * 10 + Math.cos(this.heading) * 14];
+  },
+  drawLine(c) {
+    const [tx, ty] = this.rodTip(), b = this.bobber;
+    const sx = this.x - Math.cos(this.heading) * 10, sy = this.y - Math.sin(this.heading) * 10;
+    let bx = b.x, by = b.y, lift = 0;
+    if (this.mode === "cast") {
+      const p = Math.min(1, this.castT / 0.45);
+      bx = tx + (b.x - tx) * p;
+      by = ty + (b.y - ty) * p;
+      lift = Math.sin(p * Math.PI) * 40;
+    } else if (this.mode === "wait") {
+      by += Math.sin(this.time * 3) * 1.5;
+    } else if (this.mode === "bite") {
+      by += 4;
+      bx += Math.sin(this.time * 40) * 2;
+    } else if (this.mode === "reel") {
+      bx += Math.sin(this.time * 25) * 3;
+      by += Math.cos(this.time * 21) * 3;
+    }
+    // Rod (unbreakable, of course)
+    c.strokeStyle = "#6d4c41";
+    c.lineWidth = 3;
+    c.beginPath(); c.moveTo(sx, sy); c.lineTo(tx, ty); c.stroke();
+    if (this.mode === "caught") return;
+    c.strokeStyle = "rgba(255,255,255,0.8)";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(tx, ty);
+    c.quadraticCurveTo((tx + bx) / 2, (ty + by) / 2 + (this.mode === "reel" ? 0 : 14) - lift, bx, by - lift);
+    c.stroke();
+    c.fillStyle = "#fff";
+    c.beginPath(); c.arc(bx, by - lift, 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#ff3b3b";
+    c.beginPath(); c.arc(bx, by - lift, 5, Math.PI, 0); c.fill();
+    if (this.mode === "bite") {
+      c.font = "bold 30px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.lineWidth = 4;
+      c.strokeStyle = "#000";
+      const jump = Math.abs(Math.sin(this.time * 12)) * 6;
+      c.strokeText("!", bx, by - 28 - jump);
+      c.fillStyle = "#ffcc00";
+      c.fillText("!", bx, by - 28 - jump);
+    }
+  },
+  drawPlayer(c) {
+    const step = this.walking ? Math.abs(Math.sin(this.time * 12)) * 2 : 0;
+    const x = this.px, y = this.py - step;
+    c.fillStyle = "rgba(0,0,0,0.25)";
+    c.beginPath(); c.ellipse(this.px, this.py + 9, 8, 3, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#2f8cff";
+    c.fillRect(x - 5, y + 2, 4, 7);
+    c.fillRect(x + 1, y + 2, 4, 7);
+    c.fillStyle = "#ff7043";
+    c.beginPath(); c.arc(x, y - 2, 7, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#f1c27d";
+    c.beginPath(); c.arc(x, y - 11, 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#e8c170";
+    c.beginPath(); c.ellipse(x, y - 14, 9, 3, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(x, y - 15, 4, Math.PI, 0); c.fill();
+    c.fillStyle = "#ff3b3b";
+    c.fillRect(x - 4, y - 15, 8, 1.5);
+  },
+  drawFx(c) {
+    for (const f of this.fx) {
+      if (f.t < 0) continue;
+      const p = f.t / f.life;
+      c.globalAlpha = 1 - p;
+      if (f.type === "text") {
+        c.font = "bold 15px system-ui, sans-serif";
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.lineWidth = 3;
+        c.strokeStyle = "#000";
+        c.strokeText(f.text, f.x, f.y - p * 30);
+        c.fillStyle = f.color;
+        c.fillText(f.text, f.x, f.y - p * 30);
+      } else if (f.type === "spark") {
+        c.fillStyle = f.color;
+        c.beginPath(); c.arc(f.x, f.y, 2.5, 0, Math.PI * 2); c.fill();
+      } else {
+        c.strokeStyle = "#fff";
+        c.lineWidth = 2;
+        c.beginPath(); c.ellipse(f.x, f.y, 4 + p * 20, 2 + p * 9, 0, 0, Math.PI * 2); c.stroke();
+      }
+    }
+    c.globalAlpha = 1;
+  },
+  panel(c, x, y, w, h) {
+    c.fillStyle = "rgba(10,14,30,0.72)";
+    roundBox(c, x, y, w, h, 10);
+    c.fill();
+  },
+  craftRow(i) { return { x: 566, y: 92 + i * 52, w: 222, h: 46 }; },
+  drawHud(c) {
+    c.textBaseline = "middle";
+
+    // Backpack
+    this.panel(c, 10, 10, 420, 34);
+    c.font = "bold 14px system-ui, sans-serif";
+    c.textAlign = "left";
+    RESOURCES.forEach(([k, icon], i) => {
+      c.fillStyle = "#fff";
+      c.fillText(`${icon} ${this.inv[k]}`, 20 + i * 58, 28);
+    });
+
+    // Fish stats + upgrade levels
+    this.panel(c, 566, 10, 224, 52);
+    c.fillStyle = "#fff";
+    c.fillText(`🐟 ${this.caught} caught`, 578, 26);
+    c.textAlign = "right";
+    c.fillText(`📖 ${Object.keys(this.log).length}/${FISH_TYPES.length}`, 780, 26);
+    c.textAlign = "left";
+    c.font = "13px system-ui, sans-serif";
+    c.fillStyle = "#c8cbe0";
+    c.fillText(FISHING_UPGRADES.map(u => `${u.icon} Lv${this.up[u.key]}`).join("   ") + "   🎣 ∞", 578, 47);
+
+    // Crafting menu while on land
+    if (this.mode === "walk") {
+      this.panel(c, 566, 68, 224, 186);
+      c.font = "bold 13px system-ui, sans-serif";
+      c.fillStyle = "#ffcc00";
+      c.fillText("🔨 Craft upgrades (1 / 2 / 3)", 576, 81);
+      FISHING_UPGRADES.forEach((u, i) => {
+        const r = this.craftRow(i), lvl = this.up[u.key], maxed = lvl >= u.max;
+        const cost = maxed ? {} : u.cost(lvl);
+        const can = !maxed && Object.entries(cost).every(([k, v]) => this.inv[k] >= v);
+        c.fillStyle = can ? "rgba(76,217,100,0.25)" : "rgba(255,255,255,0.06)";
+        roundBox(c, r.x + 4, r.y, r.w - 8, r.h, 8);
+        c.fill();
+        c.font = "bold 13px system-ui, sans-serif";
+        c.fillStyle = "#fff";
+        c.fillText(`${i + 1}. ${u.icon} ${u.name}  ${maxed ? "MAX" : `Lv${lvl}→${lvl + 1}`}`, r.x + 12, r.y + 14);
+        c.font = "12px system-ui, sans-serif";
+        c.fillStyle = "#c8cbe0";
+        const desc = { sails: "Sail faster", bait: "Fish bite sooner", lure: "More rare fish" }[u.key];
+        const costText = maxed ? "Fully upgraded!" : Object.entries(cost).map(([k, v]) => `${RES_ICON[k]}${v}`).join(" ");
+        c.fillText(`${desc} · ${costText}`, r.x + 12, r.y + 33);
+      });
+    }
+
+    // Minimap
+    const mw = 170, mh = mw * SEA_H / SEA_W, mx = this.w - mw - 10, my = this.h - mh - 10, sc = mw / SEA_W;
+    this.panel(c, mx - 4, my - 4, mw + 8, mh + 8);
+    c.fillStyle = "#1e6aa8";
+    c.fillRect(mx, my, mw, mh);
+    for (const isl of this.islands) {
+      c.fillStyle = this.visited.includes(isl.name) ? BIOMES[isl.biome].ground : "#7b8494";
+      c.beginPath(); c.arc(mx + isl.x * sc, my + isl.y * sc, Math.max(3, isl.r * sc), 0, Math.PI * 2); c.fill();
+    }
+    const [cx, cy] = this.cam;
+    c.strokeStyle = "rgba(255,255,255,0.5)";
+    c.lineWidth = 1;
+    c.strokeRect(mx + cx * sc, my + cy * sc, this.w * sc, this.h * sc);
+    c.fillStyle = "#ff3b3b";
+    c.beginPath(); c.arc(mx + this.x * sc, my + this.y * sc, 3, 0, Math.PI * 2); c.fill();
+
+    // Hint at the bottom
+    const near = this.near && (this.visited.includes(this.near.name) ? this.near.name : "this island");
+    const hint = {
+      sail: near ? `Press E to go ashore on ${near}` : "Arrows / WASD to sail · Space to cast your line",
+      cast: "Casting...",
+      wait: "Waiting for a bite... (move to reel your line in)",
+      bite: "❗ A bite! Press SPACE now!",
+      reel: "Hold SPACE or the mouse to lift the green bar. Keep the fish inside it!",
+      caught: "Space to keep fishing",
+      walk: this.nearNode ? `Press E to collect ${RES_ICON[NODE_TYPES[this.nearNode.type].res]} ${NODE_TYPES[this.nearNode.type].res}`
+        : this.nearBoat ? "Press E to get back in your boat"
+        : "Walk to things and press E to collect them · Craft upgrades with 1 / 2 / 3",
+    }[this.mode];
+    c.font = "bold 14px system-ui, sans-serif";
+    const tw = c.measureText(hint).width + 28;
+    const hx = Math.min((this.w - tw) / 2, mx - tw - 14);
+    this.panel(c, hx, this.h - 44, tw, 32);
+    c.textAlign = "center";
+    c.fillStyle = this.mode === "bite" ? "#ffcc00" : "#fff";
+    c.fillText(hint, hx + tw / 2, this.h - 27);
+
+    if (this.msg) {
+      c.font = "bold 15px system-ui, sans-serif";
+      const w = c.measureText(this.msg.text).width + 28;
+      this.panel(c, 10, 52, w, 30);
+      c.textAlign = "left";
+      c.fillStyle = this.msg.color;
+      c.fillText(this.msg.text, 24, 68);
+    }
+    if (this.banner) {
+      c.globalAlpha = Math.min(1, this.banner.t);
+      c.font = "bold 30px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.lineWidth = 5;
+      c.strokeStyle = "rgba(0,0,0,0.7)";
+      c.strokeText(this.banner.text, this.w / 2, 120);
+      c.fillStyle = "#fff";
+      c.fillText(this.banner.text, this.w / 2, 120);
+      c.globalAlpha = 1;
+    }
+  },
+  drawReel(c) {
+    const r = this.reel, x = 600, top = 110, bh = 320, bottom = top + bh;
+    this.panel(c, x - 30, top - 40, 130, bh + 70);
+    c.font = "bold 13px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.fillStyle = "#ffcc00";
+    c.fillText("REEL IT IN!", x + 35, top - 22);
+
+    // Water column
+    const g = c.createLinearGradient(0, top, 0, bottom);
+    g.addColorStop(0, "#4fc3f7");
+    g.addColorStop(1, "#0d3b66");
+    c.fillStyle = g;
+    roundBox(c, x, top, 40, bh, 8); c.fill();
+
+    // Your green catch zone
+    c.fillStyle = "rgba(76,217,100,0.55)";
+    c.strokeStyle = "#4cd964";
+    c.lineWidth = 2;
+    roundBox(c, x + 3, bottom - (r.zoneY + r.zh) * bh, 34, r.zh * bh, 6); c.fill(); c.stroke();
+
+    // The fish (you don't know what it is yet!)
+    const fy = bottom - r.fishY * bh, inside = r.fishY >= r.zoneY && r.fishY <= r.zoneY + r.zh;
+    c.font = "24px system-ui, sans-serif";
+    c.textBaseline = "middle";
+    c.fillText("🐟", x + 20 + Math.sin(this.time * 15) * 2, fy);
+
+    // Catch meter
+    c.fillStyle = "#2a2f45";
+    roundBox(c, x + 52, top, 14, bh, 6); c.fill();
+    c.fillStyle = inside ? "#4cd964" : "#ff9f43";
+    const ph = Math.max(0, r.progress) * bh;
+    roundBox(c, x + 52, bottom - ph, 14, ph, 6); c.fill();
+    c.font = "11px system-ui, sans-serif";
+    c.fillStyle = "#c8cbe0";
+    c.fillText("hold", x + 20, bottom + 14);
+    c.fillText("Space", x + 20, bottom + 26);
+  },
+  drawCard(c) {
+    const { f, isNew } = this.card, [label, color] = fishRarity(f);
+    const w = 320, h = 220, x = (this.w - w) / 2, y = (this.h - h) / 2 - 20;
+    this.panel(c, x, y, w, h);
+    c.strokeStyle = color;
+    c.lineWidth = 3;
+    roundBox(c, x, y, w, h, 10); c.stroke();
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillStyle = f.tint || "rgba(255,255,255,0.12)";
+    c.globalAlpha = f.tint ? 0.6 : 1;
+    c.beginPath(); c.arc(this.w / 2, y + 62, 40, 0, Math.PI * 2); c.fill();
+    c.globalAlpha = 1;
+    c.font = "56px system-ui, sans-serif";
+    c.fillText(f.icon, this.w / 2, y + 64 + Math.sin(this.time * 4) * 3);
+    c.font = "bold 22px system-ui, sans-serif";
+    c.fillStyle = "#fff";
+    c.fillText(`You caught a ${f.name}!`, this.w / 2, y + 122);
+    c.font = "bold 14px system-ui, sans-serif";
+    c.fillStyle = color;
+    c.fillText(label, this.w / 2, y + 146);
+    c.fillStyle = "#ffcc00";
+    c.fillText(`+${f.value} points${isNew ? "  ·  NEW SPECIES! +50" : ""}`, this.w / 2, y + 170);
+    c.font = "12px system-ui, sans-serif";
+    c.fillStyle = "#9aa0bf";
+    c.fillText(`You've caught ${this.log[f.name]} of these · Space to continue`, this.w / 2, y + 198);
+  },
+};
+
+const GAMES = { dodge, stack, snake, pong, flappy, memory, invaders, penalty, tetris, 2048: g2048, breakout, mines, ttt, dino, td, fishing };
 const miniCanvas = document.getElementById("miniCanvas");
 const mctx = miniCanvas.getContext("2d");
 let mini = null;
@@ -3290,6 +4126,13 @@ function openMini(game) {
 }
 
 function closeMini() {
+  // Endless games (like Island Fishing) never hit game over, so keep their best score on exit
+  const g = mini.game;
+  if (mini.state === "playing" && g.score > (bests[g.id] || 0)) {
+    bests[g.id] = g.score;
+    saveBests();
+  }
+  g.leave?.();
   mini = null;
   cancelAnimationFrame(miniRaf);
   show("library");
@@ -3340,6 +4183,9 @@ miniCanvas.addEventListener("contextmenu", e => {
 miniCanvas.addEventListener("mousemove", e => {
   if (mini.state === "playing") mini.game.pointer?.(...toGame(e));
 });
+// Holding the mouse button down (Island Fishing reels while it's held)
+miniCanvas.addEventListener("mousedown", () => { if (mini.state === "playing") mini.game.hold?.(true); });
+addEventListener("mouseup", () => { if (mini) mini.game.hold?.(false); });
 document.getElementById("miniBack").onclick = closeMini;
 document.querySelectorAll("[data-game]").forEach(btn => {
   btn.onclick = () => openMini(GAMES[btn.dataset.game]);
