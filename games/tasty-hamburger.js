@@ -2025,7 +2025,7 @@
   }
   requestAnimationFrame(frame);
 
-  // Test hook: open index.html?debug to poke at the game from the console.
+  // Test hook: open tasty-hamburger.html?debug to poke at the game from the console.
   if (location.search.includes('debug')) {
     window.__game = { get state() { return state; }, get cam() { return [camX, camY]; }, mouse, keys, give, toggleFishing, isWaterPx, makeBoat, boardBoat, leaveBoat };
   }

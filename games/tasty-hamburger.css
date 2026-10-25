@@ -178,3 +178,7 @@ button:disabled { background: #5a5a5a; color: #aaa; cursor: not-allowed; }
   background: rgba(0, 0, 10, 0.55);
   font-size: 22px; pointer-events: none;
 }
+
+/* Link back to the arcade home page */
+.card .home { display: inline-block; margin-top: 8px; color: #ffc36b; font-size: 14px; text-decoration: none; }
+.card .home:hover { text-decoration: underline; }

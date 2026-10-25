@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tasty Hamburger — Survival</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Tasty Hamburger – My Arcade</title>
+  <link rel="stylesheet" href="tasty-hamburger.css">
 </head>
 <body>
   <canvas id="game"></canvas>
@@ -60,6 +60,7 @@
       <p class="tag">Survive on a wild island. Keep yourself fed, drink water, and build a shelter before night falls.</p>
       <button id="start">Start game</button>
       <p class="small">WASD to move · click to gather · C craft · B build · H help</p>
+      <a class="home" href="../index.html">← Back to home</a>
     </div>
   </div>
 
@@ -69,6 +70,7 @@
       <p id="death-reason"></p>
       <p id="survived"></p>
       <button id="restart">Try again</button>
+      <a class="home" href="../index.html">← Back to home</a>
     </div>
   </div>
 
@@ -79,11 +81,12 @@
       <br>
       <button id="pause-restart" class="secondary">Restart</button>
       <p class="small">Press P or Esc to resume</p>
+      <a class="home" href="../index.html">← Back to home</a>
     </div>
   </div>
 
   <div id="sleep" class="hidden">Zzz… sleeping until dawn. Press any key to wake up.</div>
 
-  <script src="game.js"></script>
+  <script src="tasty-hamburger.js"></script>
 </body>
 </html>
