@@ -39,6 +39,7 @@
     gap: 10px;
   }
   .card .icon { font-size: 3em; }
+  .card .best { color: #ffcc00; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -57,96 +58,112 @@
       <div class="icon">🚀</div>
       <h2>Space Dodge</h2>
       <p>Steer your ship through a falling asteroid field.</p>
+      <p class="best" data-best="dodge">Best: 0</p>
       <a class="button" href="games/space-dodge.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🧱</div>
       <h2>Block Stack</h2>
       <p>Drop sliding blocks and build the tallest tower.</p>
+      <p class="best" data-best="stack">Best: 0</p>
       <a class="button" href="games/block-stack.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🐍</div>
       <h2>Snake</h2>
       <p>Eat apples, grow longer, don't bite yourself.</p>
+      <p class="best" data-best="snake">Best: 0</p>
       <a class="button" href="games/snake.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🏓</div>
       <h2>Paddle Pong</h2>
       <p>Beat the computer at pong. First to 7 wins.</p>
+      <p class="best" data-best="pong">Best: 0</p>
       <a class="button" href="games/paddle-pong.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🐦</div>
       <h2>Flappy Flight</h2>
       <p>Flap through the gaps between the pipes.</p>
+      <p class="best" data-best="flappy">Best: 0</p>
       <a class="button" href="games/flappy-flight.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🧠</div>
       <h2>Memory Match</h2>
       <p>Find matching pairs before the clock runs out.</p>
+      <p class="best" data-best="memory">Best: 0</p>
       <a class="button" href="games/memory-match.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">👾</div>
       <h2>Alien Invaders</h2>
       <p>Blast the alien waves before they land.</p>
+      <p class="best" data-best="invaders">Best: 0</p>
       <a class="button" href="games/alien-invaders.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">⚽</div>
       <h2>Penalty Kicks</h2>
       <p>Time your shot and beat the goalkeeper.</p>
+      <p class="best" data-best="penalty">Best: 0</p>
       <a class="button" href="games/penalty-kicks.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🟦</div>
       <h2>Block Drop</h2>
       <p>Rotate falling blocks and clear full lines.</p>
+      <p class="best" data-best="tetris">Best: 0</p>
       <a class="button" href="games/block-drop.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🔢</div>
       <h2>2048</h2>
       <p>Slide and merge number tiles to reach 2048.</p>
+      <p class="best" data-best="2048">Best: 0</p>
       <a class="button" href="games/2048.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🟧</div>
       <h2>Brick Breaker</h2>
       <p>Bounce the ball and smash every brick.</p>
+      <p class="best" data-best="breakout">Best: 0</p>
       <a class="button" href="games/brick-breaker.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">💣</div>
       <h2>Minesweeper</h2>
       <p>Clear the field without digging up a mine.</p>
+      <p class="best" data-best="mines">Best: 0</p>
       <a class="button" href="games/minesweeper.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">❌</div>
       <h2>Tic-Tac-Toe</h2>
       <p>Get three in a row before the computer does.</p>
+      <p class="best" data-best="ttt">Best: 0</p>
       <a class="button" href="games/tic-tac-toe.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🦖</div>
       <h2>Dino Run</h2>
       <p>Jump over cacti and duck under birds.</p>
+      <p class="best" data-best="dino">Best: 0</p>
       <a class="button" href="games/dino-run.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🏰</div>
       <h2>Tower Defense</h2>
       <p>Build and upgrade towers to stop 20 waves of monsters reaching your castle.</p>
+      <p class="best" data-best="td">Best: 0</p>
       <a class="button" href="games/tower-defense.html">Play</a>
     </div>
     <div class="card">
       <div class="icon">🎣</div>
       <h2>Island Fishing</h2>
       <p>Sail from island to island, catch fish and collect resources. Your progress is saved.</p>
+      <p class="best" data-best="fishing">Best: 0</p>
       <a class="button" href="games/island-fishing.html">Play</a>
     </div>
   </div>
@@ -172,6 +189,13 @@ function makeJelly(el) {
   });
 }
 makeJelly(document.getElementById("libTitle"));
+
+// Each card shows that game's best score (saved by the games in localStorage, so it survives a refresh)
+let bests = {};
+try { bests = JSON.parse(localStorage.getItem("myArcadeBest")) || {}; } catch (e) {}
+document.querySelectorAll("[data-best]").forEach(el => {
+  el.textContent = `Best: ${bests[el.dataset.best] || 0}`;
+});
 </script>
 </body>
 </html>

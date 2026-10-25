@@ -25,13 +25,19 @@ function openMini(game) {
   miniRaf = requestAnimationFrame(miniLoop);
 }
 
-function closeMini() {
-  // Endless games (like Island Fishing) never hit game over, so keep their best score on exit
+// Save the best score the moment the score passes it, so a refresh mid-game never loses it
+function recordBest() {
   const g = mini.game;
-  if (mini.state === "playing" && g.score > (bests[g.id] || 0)) {
+  if (g.score > (bests[g.id] || 0)) {
     bests[g.id] = g.score;
+    mini.newBest = true;
     saveBests();
   }
+}
+
+function closeMini() {
+  const g = mini.game;
+  if (mini.state === "playing") recordBest();
   g.leave?.();
   mini = null;
   cancelAnimationFrame(miniRaf);
@@ -45,13 +51,8 @@ function startMini() {
 }
 
 function endMini() {
-  const g = mini.game;
   mini.state = "over";
-  if (g.score > (bests[g.id] || 0)) {
-    bests[g.id] = g.score;
-    mini.newBest = true;
-    saveBests();
-  }
+  recordBest();
 }
 
 function miniKey(code, repeat) {
@@ -102,7 +103,10 @@ function miniLoop(now) {
   if (!mini) return;
   const dt = Math.min(0.033, (now - mini.last) / 1000);
   mini.last = now;
-  if (mini.state === "playing" && !mini.game.update(dt)) endMini();
+  if (mini.state === "playing") {
+    if (!mini.game.update(dt)) endMini();
+    else recordBest();
+  }
   drawMini();
   miniRaf = requestAnimationFrame(miniLoop);
 }

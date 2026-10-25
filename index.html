@@ -64,7 +64,131 @@
     70% { transform: scale(1.1, 0.9); }
     85% { transform: scale(0.97, 1.03); }
   }
+
+  /* Tasty hamburger menu button: bun, lettuce, cheese, patty, bun */
+  .burger {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 20;
+    width: 60px;
+    height: 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: none;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+  .burger:hover { transform: rotate(-8deg) scale(1.08); }
+  .burger:focus-visible { outline: 3px solid #ffcc00; outline-offset: 3px; }
+  .burger span { display: block; transition: transform 0.25s ease; }
+  .bun-top {
+    width: 40px;
+    height: 14px;
+    border-radius: 20px 20px 4px 4px;
+    background:
+      radial-gradient(ellipse 2.5px 1.5px at 25% 45%, #fff6d5 95%, transparent),
+      radial-gradient(ellipse 2.5px 1.5px at 50% 30%, #fff6d5 95%, transparent),
+      radial-gradient(ellipse 2.5px 1.5px at 72% 50%, #fff6d5 95%, transparent),
+      radial-gradient(ellipse 2.5px 1.5px at 40% 70%, #fff6d5 95%, transparent),
+      #e8a33d;
+    box-shadow: inset 0 -3px 0 #c9852a;
+  }
+  .lettuce {
+    width: 46px;
+    height: 5px;
+    border-radius: 3px;
+    background: repeating-radial-gradient(circle at 50% 0, #6fd65a 0 3px, #4caf3a 3px 5px);
+  }
+  .cheese {
+    position: relative;
+    width: 42px;
+    height: 4px;
+    background: #ffd21f;
+  }
+  .cheese::after {   /* melty drip */
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 3px;
+    border: 4px solid transparent;
+    border-top: 6px solid #ffd21f;
+  }
+  .patty { width: 44px; height: 8px; border-radius: 5px; background: #6b3a1f; box-shadow: inset 0 -2px 0 #4a2612; }
+  .bun-bottom { width: 40px; height: 8px; border-radius: 3px 3px 10px 10px; background: #e8a33d; box-shadow: inset 0 -2px 0 #c9852a; }
+  /* When the menu is open the burger opens up */
+  .burger.open .bun-top { transform: translateY(-4px) rotate(-6deg); }
+  .burger.open .lettuce { transform: translateY(-2px); }
+  .burger.open .bun-bottom { transform: translateY(3px); }
+
+  /* Slide-out menu */
+  .menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 15;
+    width: min(290px, 85vw);
+    height: 100vh;
+    overflow-y: auto;
+    padding: 88px 14px 20px;
+    box-sizing: border-box;
+    background: rgba(10, 8, 30, 0.92);
+    backdrop-filter: blur(6px);
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+    font-family: system-ui, -apple-system, sans-serif;
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition: transform 0.3s ease, visibility 0.3s;
+  }
+  .menu.open { transform: none; visibility: visible; }
+  .menu h2 {
+    font-family: "Pacifico", cursive;
+    font-weight: normal;
+    color: #ffcc00;
+    margin: 0 0 10px 8px;
+  }
+  .menu a {
+    display: block;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: #fff;
+    text-decoration: none;
+    font-size: 1.05em;
+  }
+  .menu a:hover, .menu a:focus-visible { background: rgba(255, 255, 255, 0.12); outline: none; }
+  .menu a.main { color: #222; background: #ffcc00; font-weight: bold; margin-bottom: 10px; }
+  .menu a.main:hover { filter: brightness(1.1); }
 </style>
+
+<button class="burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="menu">
+  <span class="bun-top"></span><span class="lettuce"></span><span class="cheese"></span><span class="patty"></span><span class="bun-bottom"></span>
+</button>
+<nav class="menu" id="menu" aria-label="Games">
+  <h2>Menu</h2>
+  <a class="main" href="game.html">🎮 All games</a>
+  <a href="games/racing.html">🏎️ Coin Rush Racing</a>
+  <a href="games/space-dodge.html">🚀 Space Dodge</a>
+  <a href="games/block-stack.html">🧱 Block Stack</a>
+  <a href="games/snake.html">🐍 Snake</a>
+  <a href="games/paddle-pong.html">🏓 Paddle Pong</a>
+  <a href="games/flappy-flight.html">🐦 Flappy Flight</a>
+  <a href="games/memory-match.html">🧠 Memory Match</a>
+  <a href="games/alien-invaders.html">👾 Alien Invaders</a>
+  <a href="games/penalty-kicks.html">⚽ Penalty Kicks</a>
+  <a href="games/block-drop.html">🟦 Block Drop</a>
+  <a href="games/2048.html">🔢 2048</a>
+  <a href="games/brick-breaker.html">🟧 Brick Breaker</a>
+  <a href="games/minesweeper.html">💣 Minesweeper</a>
+  <a href="games/tic-tac-toe.html">❌ Tic-Tac-Toe</a>
+  <a href="games/dino-run.html">🦖 Dino Run</a>
+  <a href="games/tower-defense.html">🏰 Tower Defense</a>
+  <a href="games/island-fishing.html">🎣 Island Fishing</a>
+</nav>
 
 <canvas id="stars"></canvas>
 <h1 id="title">Hello from my arcade</h1>
@@ -122,4 +246,28 @@
   addEventListener("resize", resize);
   resize();
   draw();
+
+  // Hamburger menu: click the burger to open/close; Esc or clicking outside closes it
+  const burger = document.getElementById("burger");
+  const menu = document.getElementById("menu");
+  function setMenu(open) {
+    menu.classList.toggle("open", open);
+    burger.classList.toggle("open", open);
+    burger.setAttribute("aria-expanded", open);
+    burger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+  }
+  burger.addEventListener("click", () => {
+    const open = !menu.classList.contains("open");
+    setMenu(open);
+    if (open) boing(0.2);
+  });
+  addEventListener("keydown", e => {
+    if (e.key === "Escape" && menu.classList.contains("open")) {
+      setMenu(false);
+      burger.focus();
+    }
+  });
+  addEventListener("click", e => {
+    if (menu.classList.contains("open") && !menu.contains(e.target) && !burger.contains(e.target)) setMenu(false);
+  });
 </script>
