@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy Flight – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Flappy Flight: flap through the pipe gaps
+const flappy = {
+  id: "flappy", title: "🐦 Flappy Flight", w: 400, h: 600, gap: 160, pw: 60, bx: 100,
+  controls: "Space, W, ↑ or click to flap · Fly through the gaps",
+  reset() {
+    this.y = this.h / 2;
+    this.vy = 0;
+    this.pipes = [];
+    this.timer = 0.6;
+    this.score = 0;
+    this.scroll = 0;
+  },
+  flap() { this.vy = -400; },
+  key(code) { if (["Space", "Enter", "KeyW", "ArrowUp"].includes(code)) this.flap(); },
+  tap() { this.flap(); },
+  update(dt) {
+    this.vy += 1300 * dt;
+    this.y += this.vy * dt;
+    if (this.y < 14) { this.y = 14; this.vy = 0; }
+    this.scroll = (this.scroll + 160 * dt) % 24;
+
+    this.timer -= dt;
+    if (this.timer <= 0) {
+      this.timer = 1.5;
+      this.pipes.push({ x: this.w, top: 60 + Math.random() * (this.h - 180 - this.gap), passed: false });
+    }
+    for (const p of this.pipes) {
+      p.x -= 160 * dt;
+      if (!p.passed && p.x + this.pw < this.bx) { p.passed = true; this.score++; }
+    }
+    this.pipes = this.pipes.filter(p => p.x > -this.pw);
+
+    const r = 14;
+    if (this.y + r > this.h - 60) return false;
+    return !this.pipes.some(p =>
+      this.bx + r > p.x && this.bx - r < p.x + this.pw && (this.y - r < p.top || this.y + r > p.top + this.gap));
+  },
+  draw(c) {
+    const g = c.createLinearGradient(0, 0, 0, this.h);
+    g.addColorStop(0, "#4fc3f7");
+    g.addColorStop(1, "#b3e5fc");
+    c.fillStyle = g;
+    c.fillRect(0, 0, this.w, this.h);
+
+    for (const p of this.pipes) {
+      c.fillStyle = "#2ecc71";
+      c.fillRect(p.x, 0, this.pw, p.top);
+      c.fillRect(p.x, p.top + this.gap, this.pw, this.h);
+      c.fillStyle = "#27ae60";
+      c.fillRect(p.x - 4, p.top - 20, this.pw + 8, 20);
+      c.fillRect(p.x - 4, p.top + this.gap, this.pw + 8, 20);
+    }
+
+    c.fillStyle = "#c8a165";
+    c.fillRect(0, this.h - 60, this.w, 60);
+    c.fillStyle = "#6ab04c";
+    c.fillRect(0, this.h - 60, this.w, 12);
+    c.fillStyle = "#5a9a3c";
+    for (let x = -this.scroll; x < this.w; x += 24) c.fillRect(x, this.h - 60, 12, 12);
+
+    c.save();
+    c.translate(this.bx, this.y);
+    c.rotate(clamp(this.vy / 900, -0.5, 1));
+    c.fillStyle = "#ffcc00";
+    c.beginPath(); c.arc(0, 0, 14, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#ff9f43";
+    c.beginPath(); c.moveTo(10, -2); c.lineTo(22, 3); c.lineTo(10, 8); c.fill();
+    c.fillStyle = "#fff";
+    c.beginPath(); c.arc(5, -5, 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#111";
+    c.beginPath(); c.arc(7, -5, 2.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#f5b700";
+    c.beginPath(); c.ellipse(-5, 3, 8, 5, 0, 0, Math.PI * 2); c.fill();
+    c.restore();
+
+    c.font = "bold 44px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.lineWidth = 5;
+    c.strokeStyle = "#000";
+    c.strokeText(this.score, this.w / 2, 70);
+    c.fillStyle = "#fff";
+    c.fillText(this.score, this.w / 2, 70);
+  },
+};
+
+openMini(flappy);
+</script>
+</body>
+</html>

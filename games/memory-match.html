@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Match – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Memory Match: find pairs against the clock; clearing a board deals a new one
+const memory = {
+  id: "memory", title: "🧠 Memory Match", w: 480, h: 540, top: 60, cell: 120,
+  controls: "Click cards (or arrow keys + Space) to flip · Clear a board for +10 seconds",
+  endText: "⏰ Time's up!",
+  faces: ["🍎", "🍌", "🍇", "🍓", "🍒", "🥝", "🍍", "🍉"],
+  reset() {
+    this.left = 60;
+    this.score = 0;
+    this.cursor = 0;
+    this.redeal = 0;
+    this.deal();
+  },
+  deal() {
+    const f = shuffle([...this.faces, ...this.faces]);
+    this.cards = f.map(face => ({ face, up: false, done: false }));
+    this.open = [];
+    this.hide = 0;
+  },
+  flip(i) {
+    const card = this.cards[i];
+    if (!card || card.up || this.hide > 0 || this.redeal > 0) return;
+    card.up = true;
+    this.open.push(card);
+    if (this.open.length < 2) return;
+    const [a, b] = this.open;
+    if (a.face === b.face) {
+      a.done = b.done = true;
+      this.open = [];
+      this.score++;
+      if (this.cards.every(c => c.done)) { this.left += 10; this.redeal = 0.6; }
+    } else {
+      this.hide = 0.7;   // let the player see both before they flip back
+    }
+  },
+  key(code) {
+    this.cursor = gridMove(this.cursor, code, 4, 4);
+    if (code === "Space" || code === "Enter") this.flip(this.cursor);
+  },
+  tap(x, y) {
+    const col = Math.floor(x / this.cell), row = Math.floor((y - this.top) / this.cell);
+    if (col < 0 || col > 3 || row < 0 || row > 3) return;
+    this.cursor = row * 4 + col;
+    this.flip(this.cursor);
+  },
+  update(dt) {
+    this.left -= dt;
+    if (this.hide > 0) {
+      this.hide -= dt;
+      if (this.hide <= 0) { this.open.forEach(c => c.up = false); this.open = []; }
+    }
+    if (this.redeal > 0) {
+      this.redeal -= dt;
+      if (this.redeal <= 0) this.deal();
+    }
+    return this.left > 0;
+  },
+  draw(c) {
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(0, 0, this.w, this.h);
+
+    const frac = clamp(this.left / 60, 0, 1);
+    c.fillStyle = "#3a3f55";
+    c.fillRect(16, 20, this.w - 32, 16);
+    c.fillStyle = this.left < 10 ? "#ff3b3b" : "#ffcc00";
+    c.fillRect(16, 20, (this.w - 32) * frac, 16);
+    c.font = "bold 14px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillStyle = "#111";
+    c.fillText(`${Math.ceil(Math.max(0, this.left))}s`, this.w / 2, 29);
+
+    this.cards.forEach((card, i) => {
+      const x = (i % 4) * this.cell + 8, y = this.top + Math.floor(i / 4) * this.cell + 8, s = this.cell - 16;
+      c.fillStyle = card.done ? "rgba(76,217,100,0.35)" : card.up ? "#fff" : "#3a3f55";
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x, y, s, s, 12); else c.rect(x, y, s, s);
+      c.fill();
+      if (card.up) {
+        c.font = "56px system-ui, sans-serif";
+        c.fillText(card.face, x + s / 2, y + s / 2 + 2);
+      } else {
+        c.font = "bold 40px system-ui, sans-serif";
+        c.fillStyle = "#6c7293";
+        c.fillText("?", x + s / 2, y + s / 2);
+      }
+      if (i === this.cursor) {
+        c.strokeStyle = "#ffcc00";
+        c.lineWidth = 3;
+        c.stroke();
+      }
+    });
+    c.textBaseline = "alphabetic";
+  },
+};
+
+openMini(memory);
+</script>
+</body>
+</html>

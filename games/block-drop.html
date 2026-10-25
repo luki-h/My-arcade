@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Block Drop – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Block Drop: falling-blocks puzzle, clear full lines
+const PIECES = {
+  I: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]],
+  O: [[1, 1], [1, 1]],
+  T: [[0, 1, 0], [1, 1, 1], [0, 0, 0]],
+  S: [[0, 1, 1], [1, 1, 0], [0, 0, 0]],
+  Z: [[1, 1, 0], [0, 1, 1], [0, 0, 0]],
+  J: [[1, 0, 0], [1, 1, 1], [0, 0, 0]],
+  L: [[0, 0, 1], [1, 1, 1], [0, 0, 0]],
+};
+const PIECE_COLORS = { I: "#1fd6d6", O: "#ffd21f", T: "#b057ff", S: "#2ecc71", Z: "#ff3b3b", J: "#2f8cff", L: "#ff8c1a" };
+
+const tetris = {
+  id: "tetris", title: "🟦 Block Drop", w: 420, h: 560, cols: 10, rows: 20, cs: 28, repeatKeys: true,
+  controls: "← / → move · ↑ rotate · ↓ soft drop · Space hard drop",
+  reset() {
+    this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
+    this.bag = [];
+    this.next = this.take();
+    this.score = 0;
+    this.lines = 0;
+    this.fall = 0;
+    this.over = false;
+    this.spawn();
+  },
+  // "Bag" randomizer: every piece shows up once per 7 before any repeats
+  take() {
+    if (!this.bag.length) this.bag = shuffle(Object.keys(PIECES));
+    return this.bag.pop();
+  },
+  spawn() {
+    const t = this.next;
+    this.next = this.take();
+    const m = PIECES[t].map(r => [...r]);
+    this.p = { t, m, x: Math.floor((this.cols - m[0].length) / 2), y: t === "I" ? -1 : 0 };
+    if (this.hits(m, this.p.x, this.p.y)) this.over = true;
+  },
+  hits(m, x, y) {
+    for (let r = 0; r < m.length; r++) {
+      for (let c = 0; c < m[r].length; c++) {
+        if (!m[r][c]) continue;
+        const gx = x + c, gy = y + r;
+        if (gx < 0 || gx >= this.cols || gy >= this.rows) return true;
+        if (gy >= 0 && this.grid[gy][gx]) return true;
+      }
+    }
+    return false;
+  },
+  move(dx, dy) {
+    if (this.hits(this.p.m, this.p.x + dx, this.p.y + dy)) return false;
+    this.p.x += dx;
+    this.p.y += dy;
+    return true;
+  },
+  rotate() {
+    const m = this.p.m;
+    const r = m[0].map((_, i) => m.map(row => row[i]).reverse());
+    // Nudge sideways if rotating into a wall
+    for (const k of [0, -1, 1, -2, 2]) {
+      if (!this.hits(r, this.p.x + k, this.p.y)) { this.p.m = r; this.p.x += k; return; }
+    }
+  },
+  level() { return 1 + Math.floor(this.lines / 10); },
+  lock() {
+    const { m, x, y, t } = this.p;
+    for (let r = 0; r < m.length; r++) {
+      for (let c = 0; c < m[r].length; c++) {
+        if (!m[r][c]) continue;
+        if (y + r < 0) { this.over = true; return; }
+        this.grid[y + r][x + c] = t;
+      }
+    }
+    this.grid = this.grid.filter(row => row.some(v => !v));
+    const cleared = this.rows - this.grid.length;
+    while (this.grid.length < this.rows) this.grid.unshift(Array(this.cols).fill(null));
+    if (cleared) {
+      this.score += [0, 100, 300, 500, 800][cleared] * this.level();
+      this.lines += cleared;
+    }
+    this.spawn();
+  },
+  key(code, repeat) {
+    if (code === "ArrowLeft" || code === "KeyA") this.move(-1, 0);
+    else if (code === "ArrowRight" || code === "KeyD") this.move(1, 0);
+    else if (code === "ArrowDown" || code === "KeyS") { if (this.move(0, 1)) this.score++; this.fall = 0; }
+    else if (repeat) return;
+    else if (code === "ArrowUp" || code === "KeyW") this.rotate();
+    else if (code === "Space") {
+      while (this.move(0, 1)) this.score += 2;
+      this.lock();
+    }
+  },
+  update(dt) {
+    if (this.over) return false;
+    this.fall += dt;
+    if (this.fall >= Math.max(0.08, 0.8 - (this.level() - 1) * 0.07)) {
+      this.fall = 0;
+      if (!this.move(0, 1)) this.lock();
+    }
+    return !this.over;
+  },
+  cell(c, x, y, color, s = this.cs) {
+    c.fillStyle = color;
+    c.fillRect(x + 1, y + 1, s - 2, s - 2);
+    c.fillStyle = "rgba(255,255,255,0.3)";
+    c.fillRect(x + 1, y + 1, s - 2, 4);
+  },
+  draw(c) {
+    const cs = this.cs, bw = this.cols * cs;
+    c.fillStyle = "#111827";
+    c.fillRect(0, 0, this.w, this.h);
+    c.strokeStyle = "rgba(255,255,255,0.05)";
+    for (let x = 0; x <= bw; x += cs) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, this.h); c.stroke(); }
+    for (let y = 0; y <= this.h; y += cs) { c.beginPath(); c.moveTo(0, y); c.lineTo(bw, y); c.stroke(); }
+
+    this.grid.forEach((row, r) => row.forEach((t, col) => { if (t) this.cell(c, col * cs, r * cs, PIECE_COLORS[t]); }));
+
+    // Ghost shows where the piece will land
+    const { m, x, t } = this.p;
+    let gy = this.p.y;
+    while (!this.hits(m, x, gy + 1)) gy++;
+    m.forEach((row, r) => row.forEach((v, col) => {
+      if (!v) return;
+      c.strokeStyle = "rgba(255,255,255,0.35)";
+      c.strokeRect((x + col) * cs + 2, (gy + r) * cs + 2, cs - 4, cs - 4);
+      if (this.p.y + r >= 0) this.cell(c, (x + col) * cs, (this.p.y + r) * cs, PIECE_COLORS[t]);
+    }));
+
+    // Side panel
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(bw, 0, this.w - bw, this.h);
+    c.fillStyle = "#fff";
+    c.textAlign = "center";
+    c.font = "bold 16px system-ui, sans-serif";
+    const px = bw + (this.w - bw) / 2;
+    c.fillText("NEXT", px, 36);
+    const nm = PIECES[this.next], s = 20;
+    nm.forEach((row, r) => row.forEach((v, col) => {
+      if (v) this.cell(c, px - (nm[0].length * s) / 2 + col * s, 56 + r * s, PIECE_COLORS[this.next], s);
+    }));
+    c.fillText("LINES", px, 180);
+    c.fillText("LEVEL", px, 250);
+    c.font = "bold 26px system-ui, sans-serif";
+    c.fillStyle = "#ffcc00";
+    c.fillText(this.lines, px, 212);
+    c.fillText(this.level(), px, 282);
+  },
+};
+
+openMini(tetris);
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paddle Pong – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Paddle Pong: you vs the computer, first to 7
+const pong = {
+  id: "pong", title: "🏓 Paddle Pong", w: 640, h: 420, ph: 80, win: 7,
+  controls: "W / S or ↑ / ↓ to move your paddle · First to 7 wins",
+  reset() {
+    this.py = this.cy = (this.h - this.ph) / 2;
+    this.score = 0;
+    this.cpu = 0;
+    this.endText = "";
+    this.serve(1);
+  },
+  serve(dir) {
+    const a = (Math.random() - 0.5) * 0.8;
+    this.bx = this.w / 2;
+    this.by = this.h / 2;
+    this.vx = Math.cos(a) * dir;
+    this.vy = Math.sin(a);
+    this.speed = 320;
+    this.wait = 0.8;
+    this.rollCpuError();
+  },
+  // The CPU is bad on purpose: each time the ball heads its way it aims at the wrong spot
+  // (only about 1 in 7 times does it aim close enough to have a real chance)
+  rollCpuError() {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    this.cpuError = Math.random() < 0.15 ? side * Math.random() * 30 : side * (50 + Math.random() * 70);
+  },
+  // Where the ball hits the paddle decides the bounce angle
+  bounce(paddleY, dir) {
+    const off = clamp((this.by - (paddleY + this.ph / 2)) / (this.ph / 2), -1, 1);
+    this.vx = Math.cos(off) * dir;
+    this.vy = Math.sin(off);
+    this.speed = Math.min(this.speed * 1.06, 800);
+    if (dir > 0) this.rollCpuError();
+  },
+  update(dt) {
+    const mv = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+    this.py = clamp(this.py + mv * 380 * dt, 0, this.h - this.ph);
+    // Very slow, only wakes up once the ball crosses the middle, and aims badly
+    const coming = this.vx > 0 && this.bx > this.w / 2;
+    let err = this.cpuError;
+    const wrongSpot = this.by + err;
+    if (wrongSpot < this.ph / 2 || wrongSpot > this.h - this.ph / 2) err = -err;   // miss on the open side, not into a wall
+    const aim = coming ? this.by - this.ph / 2 + err : (this.h - this.ph) / 2;
+    const cpuSpeed = coming ? 140 : 40;
+    this.cy = clamp(this.cy + clamp(aim - this.cy, -cpuSpeed * dt, cpuSpeed * dt), 0, this.h - this.ph);
+
+    if (this.wait > 0) { this.wait -= dt; return true; }
+    this.bx += this.vx * this.speed * dt;
+    this.by += this.vy * this.speed * dt;
+    if (this.by < 8) { this.by = 8; this.vy = Math.abs(this.vy); }
+    if (this.by > this.h - 8) { this.by = this.h - 8; this.vy = -Math.abs(this.vy); }
+
+    const near = py => this.by > py - 8 && this.by < py + this.ph + 8;
+    if (this.vx < 0 && this.bx < 40 && this.bx > 12 && near(this.py)) { this.bx = 40; this.bounce(this.py, 1); }
+    if (this.vx > 0 && this.bx > this.w - 40 && this.bx < this.w - 12 && near(this.cy)) { this.bx = this.w - 40; this.bounce(this.cy, -1); }
+
+    if (this.bx < -10) { this.cpu++; this.serve(-1); }
+    if (this.bx > this.w + 10) { this.score++; this.serve(1); }
+    if (this.score >= this.win) { this.endText = "🏆 You win!"; return false; }
+    if (this.cpu >= this.win) { this.endText = "CPU wins"; return false; }
+    return true;
+  },
+  draw(c) {
+    c.fillStyle = "#111827";
+    c.fillRect(0, 0, this.w, this.h);
+    c.fillStyle = "rgba(255,255,255,0.25)";
+    for (let y = 10; y < this.h; y += 30) c.fillRect(this.w / 2 - 2, y, 4, 16);
+
+    c.font = "bold 48px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.fillStyle = "rgba(255,255,255,0.5)";
+    c.fillText(this.score, this.w / 2 - 60, 60);
+    c.fillText(this.cpu, this.w / 2 + 60, 60);
+    c.font = "13px system-ui, sans-serif";
+    c.fillText("YOU", this.w / 2 - 60, 80);
+    c.fillText("CPU", this.w / 2 + 60, 80);
+
+    c.fillStyle = "#ff3b3b";
+    c.fillRect(20, this.py, 12, this.ph);
+    c.fillStyle = "#2f8cff";
+    c.fillRect(this.w - 32, this.cy, 12, this.ph);
+    c.fillStyle = "#ffcc00";
+    c.beginPath(); c.arc(this.bx, this.by, 8, 0, Math.PI * 2); c.fill();
+  },
+};
+
+openMini(pong);
+</script>
+</body>
+</html>

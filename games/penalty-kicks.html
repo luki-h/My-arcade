@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Penalty Kicks – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Penalty Kicks: shoot when the sweeping target is where you want it
+const penalty = {
+  id: "penalty", title: "⚽ Penalty Kicks", w: 480, h: 560,
+  gx: 90, gw: 300, gy: 80, gh: 120, spot: 470,
+  controls: "Space or click to shoot · Aim for the corners · 3 misses and you're out",
+  reset() {
+    this.score = 0;
+    this.misses = 0;
+    this.t = 0;
+    this.nextKick();
+  },
+  nextKick() {
+    this.phase = "aim";
+    this.bx = this.w / 2;
+    this.by = this.spot;
+    this.kx = this.w / 2;
+    this.msg = "";
+  },
+  // The target sweeps around the goal (and a bit past the posts), faster as you score
+  aim() {
+    const sp = 1.6 + this.score * 0.12;
+    return {
+      x: this.w / 2 + Math.sin(this.t * sp) * (this.gw / 2 + 30),
+      y: this.gy + this.gh / 2 + Math.sin(this.t * sp * 1.7) * (this.gh / 2 - 12),
+    };
+  },
+  shoot() {
+    if (this.phase !== "aim") return;
+    this.target = this.aim();
+    this.phase = "shot";
+    this.flight = 0;
+    // The keeper guesses right sometimes, but can't reach tight corners
+    const guess = Math.random() < 0.25 ? this.target.x : this.gx + 60 + Math.random() * (this.gw - 120);
+    this.kTarget = clamp(guess + (Math.random() - 0.5) * 40, this.gx + 60, this.gx + this.gw - 60);
+  },
+  key(code) { if (code === "Space" || code === "Enter") this.shoot(); },
+  tap() { this.shoot(); },
+  update(dt) {
+    this.t += dt;
+    if (this.phase === "aim") {
+      this.kx = this.w / 2 + Math.sin(this.t * 2) * 30;
+    } else if (this.phase === "shot") {
+      this.flight = Math.min(1, this.flight + dt / 0.55);
+      this.bx = this.w / 2 + (this.target.x - this.w / 2) * this.flight;
+      this.by = this.spot + (this.target.y - this.spot) * this.flight;
+      this.kx += clamp(this.kTarget - this.kx, -330 * dt, 330 * dt);
+      if (this.flight >= 1) {
+        const onTarget = this.target.x > this.gx + 6 && this.target.x < this.gx + this.gw - 6;
+        if (!onTarget) this.msg = "MISSED!";
+        else if (Math.abs(this.target.x - this.kx) < 36) this.msg = "SAVED!";
+        else this.msg = "GOAL!";
+        if (this.msg === "GOAL!") this.score++; else this.misses++;
+        this.phase = "result";
+        this.wait = 1;
+      }
+    } else {
+      this.wait -= dt;
+      if (this.wait <= 0) {
+        if (this.misses >= 3) return false;
+        this.nextKick();
+      }
+    }
+    return true;
+  },
+  draw(c) {
+    for (let y = 0; y < this.h; y += 40) {
+      c.fillStyle = (y / 40) % 2 ? "#3c8d3c" : "#439a43";
+      c.fillRect(0, y, this.w, 40);
+    }
+    c.strokeStyle = "rgba(255,255,255,0.8)";
+    c.lineWidth = 3;
+    c.strokeRect(30, this.gy + this.gh, this.w - 60, 200);
+    c.beginPath(); c.arc(this.w / 2, this.spot, 4, 0, Math.PI * 2); c.fillStyle = "#fff"; c.fill();
+
+    // Goal net and posts
+    c.fillStyle = "rgba(255,255,255,0.12)";
+    c.fillRect(this.gx, this.gy, this.gw, this.gh);
+    c.strokeStyle = "rgba(255,255,255,0.3)";
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let x = this.gx; x <= this.gx + this.gw; x += 15) { c.moveTo(x, this.gy); c.lineTo(x, this.gy + this.gh); }
+    for (let y = this.gy; y <= this.gy + this.gh; y += 15) { c.moveTo(this.gx, y); c.lineTo(this.gx + this.gw, y); }
+    c.stroke();
+    c.strokeStyle = "#fff";
+    c.lineWidth = 6;
+    c.beginPath();
+    c.moveTo(this.gx, this.gy + this.gh); c.lineTo(this.gx, this.gy);
+    c.lineTo(this.gx + this.gw, this.gy); c.lineTo(this.gx + this.gw, this.gy + this.gh);
+    c.stroke();
+
+    // Keeper (arms out while diving)
+    const ky = this.gy + this.gh - 50, diving = this.phase !== "aim";
+    c.fillStyle = "#ff8c1a";
+    c.fillRect(this.kx - 14, ky, 28, 40);
+    c.fillRect(this.kx - (diving ? 36 : 22), ky + 4, diving ? 72 : 44, 8);
+    c.fillStyle = "#f1c27d";
+    c.beginPath(); c.arc(this.kx, ky - 10, 10, 0, Math.PI * 2); c.fill();
+
+    if (this.phase === "aim") {
+      const a = this.aim();
+      c.strokeStyle = "#ffcc00";
+      c.lineWidth = 3;
+      c.beginPath();
+      c.arc(a.x, a.y, 12, 0, Math.PI * 2);
+      c.moveTo(a.x - 18, a.y); c.lineTo(a.x + 18, a.y);
+      c.moveTo(a.x, a.y - 18); c.lineTo(a.x, a.y + 18);
+      c.stroke();
+    }
+
+    const r = 14 - 6 * ((this.spot - this.by) / (this.spot - this.gy));   // shrinks as it flies away
+    c.font = `${r * 2}px system-ui, sans-serif`;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillText("⚽", this.bx, this.by);
+
+    c.font = "bold 16px system-ui, sans-serif";
+    c.fillStyle = "#fff";
+    c.textAlign = "left";
+    c.fillText(`Goals: ${this.score}`, 12, 24);
+    c.textAlign = "right";
+    c.fillText(`Misses: ${"❌".repeat(this.misses)}${"⚪".repeat(Math.max(0, 3 - this.misses))}`, this.w - 12, 24);
+
+    if (this.msg) {
+      c.font = "bold 64px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.lineWidth = 6;
+      c.strokeStyle = "#000";
+      c.strokeText(this.msg, this.w / 2, this.h / 2 + 40);
+      c.fillStyle = this.msg === "GOAL!" ? "#4cd964" : "#ff9f43";
+      c.fillText(this.msg, this.w / 2, this.h / 2 + 40);
+    }
+    c.textBaseline = "alphabetic";
+  },
+};
+
+openMini(penalty);
+</script>
+</body>
+</html>

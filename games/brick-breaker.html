@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brick Breaker – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Brick Breaker: bounce the ball off your paddle into the bricks
+const breakout = {
+  id: "breakout", title: "🟧 Brick Breaker", w: 480, h: 600, pw: 80, py: 560,
+  controls: "Mouse or A / D, ← / → to move · Space or click to launch",
+  reset() {
+    this.px = this.w / 2;
+    this.lives = 3;
+    this.score = 0;
+    this.level = 0;
+    this.nextLevel();
+  },
+  nextLevel() {
+    this.level++;
+    this.bricks = [];
+    for (let r = 0; r < 6; r++) {
+      for (let col = 0; col < 8; col++) this.bricks.push({ x: 10 + col * 58, y: 60 + r * 24, w: 54, h: 20, row: r, alive: true });
+    }
+    this.hold();
+  },
+  // Ball sits on the paddle until launched
+  hold() {
+    this.stuck = true;
+    this.bx = this.px;
+    this.by = this.py - 10;
+    this.speed = 300 + this.level * 30;
+  },
+  launch() {
+    if (!this.stuck) return;
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 0.8;
+    this.vx = Math.cos(a);
+    this.vy = Math.sin(a);
+    this.stuck = false;
+  },
+  key(code) { if (["Space", "Enter", "ArrowUp", "KeyW"].includes(code)) this.launch(); },
+  tap() { this.launch(); },
+  pointer(x) { this.px = clamp(x, this.pw / 2, this.w - this.pw / 2); },
+  update(dt) {
+    const mv = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    this.px = clamp(this.px + mv * 420 * dt, this.pw / 2, this.w - this.pw / 2);
+    if (this.stuck) {
+      this.bx = this.px;
+      this.by = this.py - 10;
+      return true;
+    }
+
+    const ox = this.bx, oy = this.by, r = 8;
+    this.bx += this.vx * this.speed * dt;
+    this.by += this.vy * this.speed * dt;
+    if (this.bx < r) { this.bx = r; this.vx = Math.abs(this.vx); }
+    if (this.bx > this.w - r) { this.bx = this.w - r; this.vx = -Math.abs(this.vx); }
+    if (this.by < r) { this.by = r; this.vy = Math.abs(this.vy); }
+
+    // Paddle: where you hit it decides the bounce angle
+    if (this.vy > 0 && this.by + r >= this.py && this.by < this.py + 12 && Math.abs(this.bx - this.px) < this.pw / 2 + r) {
+      const off = clamp((this.bx - this.px) / (this.pw / 2), -1, 1);
+      const a = -Math.PI / 2 + off * 1.1;
+      this.vx = Math.cos(a);
+      this.vy = Math.sin(a);
+      this.by = this.py - r;
+      this.speed = Math.min(this.speed * 1.01, 650);
+    }
+
+    for (const b of this.bricks) {
+      if (!b.alive) continue;
+      if (this.bx + r < b.x || this.bx - r > b.x + b.w || this.by + r < b.y || this.by - r > b.y + b.h) continue;
+      b.alive = false;
+      this.score += (6 - b.row) * 10;
+      // Bounce off the side we came in from
+      if (ox + r <= b.x || ox - r >= b.x + b.w) this.vx = -this.vx; else this.vy = -this.vy;
+      break;
+    }
+
+    if (this.by > this.h + r) {
+      this.lives--;
+      if (this.lives <= 0) return false;
+      this.hold();
+    }
+    if (!this.bricks.some(b => b.alive)) this.nextLevel();
+    return true;
+  },
+  draw(c) {
+    c.fillStyle = "#111827";
+    c.fillRect(0, 0, this.w, this.h);
+    const rowColors = ["#ff3b3b", "#ff8c1a", "#ffd21f", "#2ecc71", "#2f8cff", "#b057ff"];
+    for (const b of this.bricks) {
+      if (!b.alive) continue;
+      c.fillStyle = rowColors[b.row];
+      c.fillRect(b.x, b.y, b.w, b.h);
+      c.fillStyle = "rgba(255,255,255,0.3)";
+      c.fillRect(b.x, b.y, b.w, 4);
+    }
+    c.fillStyle = "#fff";
+    c.fillRect(this.px - this.pw / 2, this.py, this.pw, 12);
+    c.fillStyle = "#ffcc00";
+    c.beginPath(); c.arc(this.bx, this.by, 8, 0, Math.PI * 2); c.fill();
+
+    c.font = "16px system-ui, sans-serif";
+    c.textAlign = "left";
+    c.fillText("❤️".repeat(Math.max(0, this.lives)), 10, 30);
+    c.textAlign = "right";
+    c.fillStyle = "#fff";
+    c.fillText(`Level ${this.level}`, this.w - 10, 30);
+    if (this.stuck) {
+      c.textAlign = "center";
+      c.fillStyle = "#ffcc00";
+      c.fillText("Space or click to launch", this.w / 2, this.py - 40);
+    }
+  },
+};
+
+openMini(breakout);
+</script>
+</body>
+</html>

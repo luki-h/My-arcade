@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Dodge – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Space Dodge: slide left/right, don't get hit by asteroids
+const dodge = {
+  id: "dodge", title: "🚀 Space Dodge", w: 480, h: 640,
+  controls: "A / D or ← / → to move · Dodge the asteroids!",
+  stars: Array.from({ length: 70 }, () => ({ x: Math.random() * 480, y: Math.random() * 640, s: Math.random() * 2 + 0.5 })),
+  reset() {
+    this.x = this.w / 2;
+    this.t = 0;
+    this.rocks = [];
+    this.spawn = 0;
+    this.score = 0;
+  },
+  update(dt) {
+    const dir = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    this.x = clamp(this.x + dir * 340 * dt, 20, this.w - 20);
+    this.t += dt;
+    this.score = Math.floor(this.t * 10);
+
+    for (const s of this.stars) {
+      s.y += s.s * 40 * dt;
+      if (s.y > this.h) { s.y = 0; s.x = Math.random() * this.w; }
+    }
+
+    // Rocks come faster and more often the longer you survive
+    this.spawn -= dt;
+    if (this.spawn <= 0) {
+      this.spawn = Math.max(0.22, 0.8 - this.t * 0.015);
+      const r = 12 + Math.random() * 18;
+      this.rocks.push({
+        x: r + Math.random() * (this.w - 2 * r), y: -r, r,
+        vy: 160 + this.t * 5 + Math.random() * 90,
+        rot: 0, spin: (Math.random() - 0.5) * 3,
+      });
+    }
+    for (const rk of this.rocks) { rk.y += rk.vy * dt; rk.rot += rk.spin * dt; }
+    this.rocks = this.rocks.filter(rk => rk.y - rk.r < this.h);
+
+    const sy = this.h - 60;
+    return !this.rocks.some(rk => Math.hypot(rk.x - this.x, rk.y - sy) < rk.r + 12);
+  },
+  draw(c) {
+    c.fillStyle = "#07051a";
+    c.fillRect(0, 0, this.w, this.h);
+    c.fillStyle = "#fff";
+    for (const s of this.stars) c.fillRect(s.x, s.y, s.s, s.s);
+
+    for (const rk of this.rocks) {
+      c.save();
+      c.translate(rk.x, rk.y);
+      c.rotate(rk.rot);
+      c.fillStyle = "#8a7f75";
+      c.beginPath(); c.arc(0, 0, rk.r, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#6b625a";
+      c.beginPath(); c.arc(rk.r * 0.3, -rk.r * 0.2, rk.r * 0.3, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(-rk.r * 0.35, rk.r * 0.3, rk.r * 0.2, 0, Math.PI * 2); c.fill();
+      c.restore();
+    }
+
+    c.save();
+    c.translate(this.x, this.h - 60);
+    if (mini.state === "playing") {
+      c.fillStyle = Math.random() < 0.5 ? "#ff9f43" : "#ffcc00";
+      c.beginPath(); c.moveTo(-7, 12); c.lineTo(7, 12); c.lineTo(0, 24 + Math.random() * 8); c.fill();
+    }
+    c.fillStyle = "#e8ecff";
+    c.beginPath(); c.moveTo(0, -20); c.lineTo(14, 14); c.lineTo(0, 8); c.lineTo(-14, 14); c.closePath(); c.fill();
+    c.fillStyle = "#2f8cff";
+    c.beginPath(); c.arc(0, -3, 4, 0, Math.PI * 2); c.fill();
+    c.restore();
+  },
+};
+
+openMini(dodge);
+</script>
+</body>
+</html>

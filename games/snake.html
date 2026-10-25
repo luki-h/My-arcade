@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Snake: classic grid snake
+const snake = {
+  id: "snake", title: "🐍 Snake", w: 480, h: 480, cells: 20,
+  controls: "WASD or arrow keys to turn · Eat apples, don't hit the walls or yourself",
+  reset() {
+    this.body = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }];
+    this.dir = { x: 1, y: 0 };
+    this.queue = [];
+    this.timer = 0;
+    this.score = 0;
+    this.placeFood();
+  },
+  placeFood() {
+    do {
+      this.food = { x: randInt(this.cells), y: randInt(this.cells) };
+    } while (this.body.some(b => b.x === this.food.x && b.y === this.food.y));
+  },
+  key(code) {
+    const d = {
+      KeyW: [0, -1], ArrowUp: [0, -1], KeyS: [0, 1], ArrowDown: [0, 1],
+      KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0],
+    }[code];
+    if (!d || this.queue.length >= 3) return;
+    // Queue turns so quick taps aren't lost, but never allow a U-turn into yourself
+    const last = this.queue[this.queue.length - 1] || this.dir;
+    if (d[0] === -last.x && d[1] === -last.y) return;
+    if (d[0] === last.x && d[1] === last.y) return;
+    this.queue.push({ x: d[0], y: d[1] });
+  },
+  update(dt) {
+    this.timer += dt;
+    const step = Math.max(0.06, 0.13 - this.score * 0.003);
+    while (this.timer >= step) {
+      this.timer -= step;
+      if (this.queue.length) this.dir = this.queue.shift();
+      const head = { x: this.body[0].x + this.dir.x, y: this.body[0].y + this.dir.y };
+      if (head.x < 0 || head.y < 0 || head.x >= this.cells || head.y >= this.cells) return false;
+      const eating = head.x === this.food.x && head.y === this.food.y;
+      const solid = eating ? this.body : this.body.slice(0, -1);   // the tail moves out of the way
+      if (solid.some(b => b.x === head.x && b.y === head.y)) return false;
+      this.body.unshift(head);
+      if (eating) {
+        this.score++;
+        if (this.body.length < this.cells * this.cells) this.placeFood();
+      } else {
+        this.body.pop();
+      }
+    }
+    return true;
+  },
+  draw(c) {
+    const s = this.w / this.cells;
+    for (let y = 0; y < this.cells; y++) {
+      for (let x = 0; x < this.cells; x++) {
+        c.fillStyle = (x + y) % 2 ? "#3c8d3c" : "#439a43";
+        c.fillRect(x * s, y * s, s, s);
+      }
+    }
+    // Apple
+    c.fillStyle = "#e53935";
+    c.beginPath(); c.arc((this.food.x + 0.5) * s, (this.food.y + 0.55) * s, s * 0.38, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#2ecc71";
+    c.fillRect((this.food.x + 0.5) * s, this.food.y * s + 2, 4, 6);
+
+    this.body.forEach((b, i) => {
+      c.fillStyle = i === 0 ? "#1f5fbf" : "#2f8cff";
+      c.beginPath();
+      if (c.roundRect) c.roundRect(b.x * s + 1, b.y * s + 1, s - 2, s - 2, 6); else c.rect(b.x * s + 1, b.y * s + 1, s - 2, s - 2);
+      c.fill();
+    });
+    // Eyes look where the snake is heading
+    const h = this.body[0], d = this.dir;
+    const cx = (h.x + 0.5) * s + d.x * 4, cy = (h.y + 0.5) * s + d.y * 4;
+    c.fillStyle = "#fff";
+    for (const side of [-1, 1]) {
+      c.beginPath(); c.arc(cx - d.y * side * 5, cy + d.x * side * 5, 3, 0, Math.PI * 2); c.fill();
+    }
+  },
+};
+
+openMini(snake);
+</script>
+</body>
+</html>

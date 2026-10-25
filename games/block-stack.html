@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Block Stack – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Block Stack: drop the sliding block on the tower; overhangs get chopped off
+const stack = {
+  id: "stack", title: "🧱 Block Stack", w: 400, h: 600, bh: 30,
+  controls: "Space or click to drop the block · Line it up perfectly to keep it wide",
+  reset() {
+    this.blocks = [{ x: 100, w: 200 }];
+    this.debris = [];
+    this.score = 0;
+    this.cam = 0;
+    this.dying = 0;
+    this.nextBlock();
+  },
+  nextBlock() {
+    const top = this.blocks[this.blocks.length - 1];
+    const fromLeft = this.blocks.length % 2 === 0;
+    this.cur = { x: fromLeft ? 0 : this.w - top.w, w: top.w, dir: fromLeft ? 1 : -1 };
+    this.speed = 150 + this.blocks.length * 8;
+  },
+  levelY(i) { return this.h - 40 - (i + 1) * this.bh + this.cam; },
+  color(i) { return `hsl(${(i * 14) % 360}, 75%, 58%)`; },
+  drop() {
+    if (!this.cur) return;
+    const top = this.blocks[this.blocks.length - 1], c = this.cur, lvl = this.blocks.length;
+    let left = Math.max(c.x, top.x), right = Math.min(c.x + c.w, top.x + top.w);
+    if (right <= left) {
+      // Missed completely: the whole block falls and the game ends
+      this.debris.push({ x: c.x, w: c.w, lvl, dy: 0, vy: 0 });
+      this.cur = null;
+      this.dying = 0.9;
+      return;
+    }
+    if (Math.abs(c.x - top.x) < 5) {
+      left = top.x; right = top.x + top.w;   // close enough counts as perfect
+    } else {
+      if (c.x < left) this.debris.push({ x: c.x, w: left - c.x, lvl, dy: 0, vy: 0 });
+      if (c.x + c.w > right) this.debris.push({ x: right, w: c.x + c.w - right, lvl, dy: 0, vy: 0 });
+    }
+    this.blocks.push({ x: left, w: right - left });
+    this.score++;
+    this.nextBlock();
+  },
+  key(code) { if (code === "Space" || code === "Enter") this.drop(); },
+  tap() { this.drop(); },
+  update(dt) {
+    if (this.cur) {
+      const c = this.cur;
+      c.x += c.dir * this.speed * dt;
+      if (c.x < 0) { c.x = 0; c.dir = 1; }
+      if (c.x + c.w > this.w) { c.x = this.w - c.w; c.dir = -1; }
+    }
+    for (const d of this.debris) { d.vy += 900 * dt; d.dy += d.vy * dt; }
+    this.debris = this.debris.filter(d => d.dy < 1200);
+
+    // Keep the top of the tower in view
+    const target = Math.max(0, (this.blocks.length + 1) * this.bh - 380);
+    this.cam += (target - this.cam) * Math.min(1, dt * 6);
+
+    if (this.dying) {
+      this.dying -= dt;
+      return this.dying > 0;
+    }
+    return true;
+  },
+  draw(c) {
+    const g = c.createLinearGradient(0, 0, 0, this.h);
+    g.addColorStop(0, "#1b1e3b");
+    g.addColorStop(1, "#3a2f55");
+    c.fillStyle = g;
+    c.fillRect(0, 0, this.w, this.h);
+
+    c.fillStyle = "#2a2f45";
+    c.fillRect(0, this.levelY(-1), this.w, this.h);
+
+    const drawBlock = (x, w, y, color) => {
+      c.fillStyle = color;
+      c.fillRect(x, y, w, this.bh);
+      c.fillStyle = "rgba(255,255,255,0.25)";
+      c.fillRect(x, y, w, 4);
+      c.strokeStyle = "rgba(0,0,0,0.3)";
+      c.strokeRect(x + 0.5, y + 0.5, w - 1, this.bh - 1);
+    };
+    this.blocks.forEach((b, i) => drawBlock(b.x, b.w, this.levelY(i), this.color(i)));
+    for (const d of this.debris) drawBlock(d.x, d.w, this.levelY(d.lvl) + d.dy, this.color(d.lvl));
+    if (this.cur) drawBlock(this.cur.x, this.cur.w, this.levelY(this.blocks.length), this.color(this.blocks.length));
+  },
+};
+
+openMini(stack);
+</script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alien Invaders – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Alien Invaders: shoot the marching aliens before they land
+const invaders = {
+  id: "invaders", title: "👾 Alien Invaders", w: 480, h: 600,
+  controls: "A / D or ← / → to move · Space to shoot · Don't let them land!",
+  stars: Array.from({ length: 60 }, () => [Math.random() * 480, Math.random() * 600]),
+  reset() {
+    this.x = this.w / 2;
+    this.lives = 3;
+    this.score = 0;
+    this.wave = 0;
+    this.shots = [];
+    this.bombs = [];
+    this.cool = 0;
+    this.flash = 0;
+    this.newWave();
+  },
+  newWave() {
+    this.wave++;
+    this.aliens = [];
+    for (let r = 0; r < 5; r++) {
+      for (let col = 0; col < 8; col++) this.aliens.push({ x: 60 + col * 46, y: 70 + r * 38, row: r, alive: true });
+    }
+    this.dir = 1;
+    this.speed = 30 + this.wave * 10;
+    this.bombTimer = 1;
+    this.bombs = [];
+  },
+  update(dt) {
+    const mv = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    this.x = clamp(this.x + mv * 300 * dt, 20, this.w - 20);
+    this.flash -= dt;
+
+    this.cool -= dt;
+    if (keys.Space && this.cool <= 0 && this.shots.length < 3) {
+      this.shots.push({ x: this.x, y: this.h - 70 });
+      this.cool = 0.35;
+    }
+    for (const s of this.shots) s.y -= 520 * dt;
+
+    const alive = this.aliens.filter(a => a.alive);
+    if (!alive.length) { this.newWave(); return true; }
+
+    // March side to side, stepping down at the edges; fewer aliens = faster march
+    const speed = this.speed * (1 + (40 - alive.length) / 20);
+    let edge = false;
+    for (const a of alive) {
+      a.x += this.dir * speed * dt;
+      if (a.x < 20 || a.x > this.w - 20) edge = true;
+    }
+    if (edge) {
+      this.dir *= -1;
+      for (const a of alive) { a.x = clamp(a.x, 20, this.w - 20); a.y += 16; }
+    }
+
+    for (const s of this.shots) {
+      for (const a of alive) {
+        if (a.alive && Math.abs(s.x - a.x) < 16 && Math.abs(s.y - a.y) < 14) {
+          a.alive = false;
+          s.y = -100;
+          this.score += [30, 20, 20, 10, 10][a.row];
+          break;
+        }
+      }
+    }
+    this.shots = this.shots.filter(s => s.y > -10);
+
+    this.bombTimer -= dt;
+    if (this.bombTimer <= 0) {
+      this.bombTimer = Math.max(0.3, 1.2 - this.wave * 0.1);
+      const a = alive[randInt(alive.length)];
+      this.bombs.push({ x: a.x, y: a.y + 12 });
+    }
+    for (const b of this.bombs) b.y += 240 * dt;
+    const py = this.h - 50;
+    this.bombs = this.bombs.filter(b => {
+      if (Math.abs(b.x - this.x) < 18 && Math.abs(b.y - py) < 14) {
+        this.lives--;
+        this.flash = 1;
+        return false;
+      }
+      return b.y < this.h;
+    });
+
+    if (this.lives <= 0) return false;
+    return !alive.some(a => a.alive && a.y > this.h - 90);
+  },
+  draw(c) {
+    c.fillStyle = "#05030f";
+    c.fillRect(0, 0, this.w, this.h);
+    c.fillStyle = "rgba(255,255,255,0.6)";
+    for (const [x, y] of this.stars) c.fillRect(x, y, 1.5, 1.5);
+
+    c.font = "28px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    for (const a of this.aliens) if (a.alive) c.fillText("👾", a.x, a.y);
+
+    c.fillStyle = "#ffcc00";
+    for (const s of this.shots) c.fillRect(s.x - 2, s.y - 8, 4, 12);
+    c.fillStyle = "#ff3b3b";
+    for (const b of this.bombs) c.fillRect(b.x - 2, b.y - 6, 4, 12);
+
+    // Blink the cannon after taking a hit
+    if (this.flash <= 0 || Math.floor(this.flash * 10) % 2) {
+      const py = this.h - 50;
+      c.fillStyle = "#4cd964";
+      c.fillRect(this.x - 18, py, 36, 12);
+      c.fillRect(this.x - 4, py - 10, 8, 10);
+    }
+
+    c.fillStyle = "#4cd964";
+    c.fillRect(0, this.h - 24, this.w, 2);
+    c.font = "16px system-ui, sans-serif";
+    c.textAlign = "left";
+    c.fillText("❤️".repeat(Math.max(0, this.lives)), 10, this.h - 11);
+    c.textAlign = "right";
+    c.fillStyle = "#fff";
+    c.fillText(`Wave ${this.wave}`, this.w - 10, this.h - 11);
+    c.textBaseline = "alphabetic";
+  },
+};
+
+openMini(invaders);
+</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dino Run – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Dino Run: endless runner, jump the cacti and duck the birds
+const dino = {
+  id: "dino", title: "🦖 Dino Run", w: 640, h: 240, ground: 200, dx: 60,
+  controls: "Space, ↑ or click to jump · ↓ to duck",
+  reset() {
+    this.y = 0;          // height above the ground
+    this.vy = 0;
+    this.obs = [];
+    this.speed = 320;
+    this.dist = 0;
+    this.score = 0;
+    this.next = 1;
+    this.duck = false;
+  },
+  jump() { if (this.y === 0) this.vy = 620; },
+  key(code) { if (["Space", "Enter", "ArrowUp", "KeyW"].includes(code)) this.jump(); },
+  tap() { this.jump(); },
+  update(dt) {
+    this.duck = !!(keys.ArrowDown || keys.KeyS);
+    this.vy -= (this.duck && this.y > 0 ? 4000 : 2000) * dt;   // ducking mid-air drops you fast
+    this.y += this.vy * dt;
+    if (this.y <= 0) { this.y = 0; this.vy = 0; }
+
+    this.speed = Math.min(750, this.speed + 8 * dt);
+    this.dist += this.speed * dt;
+    this.score = Math.floor(this.dist / 10);
+
+    this.next -= dt;
+    if (this.next <= 0) {
+      this.next = 0.7 + Math.random() * 1.1;
+      if (this.score > 250 && Math.random() < 0.3) {
+        // Low birds must be jumped, high birds must be ducked
+        this.obs.push({ bird: true, x: this.w, w: 40, h: 24, y: Math.random() < 0.5 ? 4 : 30 });
+      } else {
+        const n = 1 + randInt(3);
+        this.obs.push({ bird: false, x: this.w, w: n * 14 + (n - 1) * 4, h: 30 + Math.random() * 20, y: 0 });
+      }
+    }
+    for (const o of this.obs) o.x -= this.speed * dt;
+    this.obs = this.obs.filter(o => o.x + o.w > 0);
+
+    const dh = this.duck ? 26 : 44, dw = this.duck ? 52 : 40;
+    const left = this.dx + 4, right = this.dx + dw - 6, bottom = this.y + 2, top = this.y + dh - 4;
+    return !this.obs.some(o => right > o.x + 2 && left < o.x + o.w - 2 && top > o.y && bottom < o.y + o.h);
+  },
+  draw(c) {
+    const G = this.ground, ink = "#535353";
+    c.fillStyle = "#f7f7f7";
+    c.fillRect(0, 0, this.w, this.h);
+    c.fillStyle = ink;
+    c.fillRect(0, G, this.w, 2);
+    for (let x = -(this.dist % 40); x < this.w; x += 40) c.fillRect(x + 10, G + 8, 6, 2);
+
+    for (const o of this.obs) {
+      if (o.bird) {
+        const up = Math.floor(this.dist / 60) % 2;
+        const by = G - o.y - o.h;
+        c.fillRect(o.x, by + 10, 30, 8);
+        c.fillRect(o.x - 8, by + 8, 10, 6);
+        c.fillRect(o.x + 10, up ? by : by + 16, 12, 10);
+      } else {
+        c.fillStyle = "#2e8b57";
+        for (let k = 0; k * 18 < o.w; k++) {
+          const x = o.x + k * 18;
+          c.fillRect(x + 4, G - o.h, 6, o.h);
+          c.fillRect(x, G - o.h * 0.7, 4, o.h * 0.3);
+          c.fillRect(x + 10, G - o.h * 0.8, 4, o.h * 0.35);
+        }
+        c.fillStyle = ink;
+      }
+    }
+
+    // Dino made of blocks; legs alternate while running
+    const x = this.dx, by = G - this.y, step = this.y === 0 ? Math.floor(this.dist / 30) % 2 : 2;
+    c.fillStyle = ink;
+    if (this.duck) {
+      c.fillRect(x, by - 26, 40, 18);
+      c.fillRect(x + 30, by - 28, 22, 14);
+      c.fillStyle = "#f7f7f7"; c.fillRect(x + 42, by - 25, 4, 4); c.fillStyle = ink;
+    } else {
+      c.fillRect(x + 20, by - 44, 22, 16);
+      c.fillRect(x + 6, by - 30, 26, 20);
+      c.fillRect(x, by - 34, 8, 12);
+      c.fillRect(x + 30, by - 24, 8, 4);
+      c.fillStyle = "#f7f7f7"; c.fillRect(x + 26, by - 40, 4, 4); c.fillStyle = ink;
+    }
+    c.fillRect(x + 10, by - 10, 6, step === 0 ? 6 : 10);
+    c.fillRect(x + 22, by - 10, 6, step === 1 ? 6 : 10);
+
+    c.font = "bold 16px ui-monospace, monospace";
+    c.textAlign = "right";
+    c.fillText(String(this.score).padStart(5, "0"), this.w - 12, 24);
+  },
+};
+
+openMini(dino);
+</script>
+</body>
+</html>

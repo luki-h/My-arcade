@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic-Tac-Toe – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Tic-Tac-Toe: rounds against the computer until it beats you
+const LINES3 = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+function ticWinner(b) {
+  for (const l of LINES3) if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return { who: b[l[0]], line: l };
+  return b.every(v => v) ? { who: "draw" } : null;
+}
+const ttt = {
+  id: "ttt", title: "❌ Tic-Tac-Toe", w: 360, h: 400, top: 40, cs: 120,
+  controls: "Click a square (or arrow keys + Space) · You're X · Keep winning until the CPU beats you",
+  endText: "CPU wins!",
+  reset() {
+    this.score = 0;
+    this.draws = 0;
+    this.round = 0;
+    this.cursor = 4;
+    this.newRound();
+  },
+  newRound() {
+    this.round++;
+    this.b = Array(9).fill("");
+    this.turn = this.round % 2 ? "X" : "O";   // take turns going first
+    this.think = 0.5;
+    this.result = null;
+    this.wait = 0;
+  },
+  afterMove() {
+    const r = ticWinner(this.b);
+    if (r) {
+      this.result = r;
+      if (r.who === "X") this.score++;
+      if (r.who === "draw") this.draws++;
+      this.wait = 1.2;
+      return;
+    }
+    this.turn = this.turn === "X" ? "O" : "X";
+    this.think = 0.45;
+  },
+  play(i) {
+    if (this.turn !== "X" || this.result || this.b[i]) return;
+    this.b[i] = "X";
+    this.afterMove();
+  },
+  cpuMove() {
+    const b = this.b, free = b.map((v, i) => (v ? -1 : i)).filter(i => i >= 0);
+    const winsWith = who => free.find(i => {
+      b[i] = who;
+      const w = ticWinner(b)?.who === who;
+      b[i] = "";
+      return w;
+    });
+    let i = winsWith("O");                         // win if possible
+    if (i === undefined) i = winsWith("X");        // otherwise block
+    if (i === undefined || Math.random() < 0.15) { // sometimes it slips up
+      const corners = [0, 2, 6, 8].filter(k => !b[k]);
+      i = !b[4] && Math.random() < 0.7 ? 4
+        : corners.length && Math.random() < 0.7 ? corners[randInt(corners.length)]
+        : free[randInt(free.length)];
+    }
+    b[i] = "O";
+    this.afterMove();
+  },
+  tap(x, y) {
+    const col = Math.floor(x / this.cs), row = Math.floor((y - this.top) / this.cs);
+    if (col < 0 || col > 2 || row < 0 || row > 2) return;
+    this.cursor = row * 3 + col;
+    this.play(this.cursor);
+  },
+  key(code) {
+    this.cursor = gridMove(this.cursor, code, 3, 3);
+    if (code === "Space" || code === "Enter") this.play(this.cursor);
+  },
+  update(dt) {
+    if (this.result) {
+      this.wait -= dt;
+      if (this.wait <= 0) {
+        if (this.result.who === "O") return false;
+        this.newRound();
+      }
+    } else if (this.turn === "O") {
+      this.think -= dt;
+      if (this.think <= 0) this.cpuMove();
+    }
+    return true;
+  },
+  draw(c) {
+    const cs = this.cs, top = this.top;
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(0, 0, this.w, this.h);
+    c.font = "bold 16px system-ui, sans-serif";
+    c.textBaseline = "middle";
+    c.fillStyle = "#fff";
+    c.textAlign = "left";
+    c.fillText(`Wins ${this.score} · Draws ${this.draws}`, 12, 20);
+    c.textAlign = "right";
+    c.fillStyle = "#ffcc00";
+    c.fillText(this.result ? "" : this.turn === "X" ? "Your turn" : "CPU thinking…", this.w - 12, 20);
+
+    c.strokeStyle = "#6c7293";
+    c.lineWidth = 4;
+    c.beginPath();
+    for (let k = 1; k < 3; k++) {
+      c.moveTo(k * cs, top + 10); c.lineTo(k * cs, top + 3 * cs - 10);
+      c.moveTo(10, top + k * cs); c.lineTo(3 * cs - 10, top + k * cs);
+    }
+    c.stroke();
+
+    const center = i => [(i % 3 + 0.5) * cs, top + (Math.floor(i / 3) + 0.5) * cs];
+    c.lineWidth = 10;
+    c.lineCap = "round";
+    this.b.forEach((v, i) => {
+      const [x, y] = center(i);
+      if (v === "X") {
+        c.strokeStyle = "#ff3b3b";
+        c.beginPath();
+        c.moveTo(x - 30, y - 30); c.lineTo(x + 30, y + 30);
+        c.moveTo(x + 30, y - 30); c.lineTo(x - 30, y + 30);
+        c.stroke();
+      } else if (v === "O") {
+        c.strokeStyle = "#2f8cff";
+        c.beginPath(); c.arc(x, y, 32, 0, Math.PI * 2); c.stroke();
+      }
+    });
+    if (!this.result && this.turn === "X") {
+      const x = (this.cursor % 3) * cs, y = top + Math.floor(this.cursor / 3) * cs;
+      c.strokeStyle = "rgba(255,204,0,0.6)";
+      c.lineWidth = 3;
+      c.strokeRect(x + 8, y + 8, cs - 16, cs - 16);
+    }
+
+    if (this.result) {
+      if (this.result.line) {
+        const [a, , b] = this.result.line;
+        const [x1, y1] = center(a), [x2, y2] = center(b);
+        c.strokeStyle = "#ffcc00";
+        c.lineWidth = 8;
+        c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+      }
+      const msg = { X: "You win!", O: "CPU wins!", draw: "Draw!" }[this.result.who];
+      c.font = "bold 44px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.lineWidth = 6;
+      c.strokeStyle = "#000";
+      c.strokeText(msg, this.w / 2, top + 1.5 * cs);
+      c.fillStyle = this.result.who === "X" ? "#4cd964" : "#fff";
+      c.fillText(msg, this.w / 2, top + 1.5 * cs);
+    }
+    c.lineCap = "butt";
+    c.textBaseline = "alphabetic";
+  },
+};
+
+openMini(ttt);
+</script>
+</body>
+</html>

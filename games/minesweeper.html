@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minesweeper – My Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<!-- Mini games (Space Dodge, Block Stack, Snake) -->
+<section class="screen" id="mini" hidden>
+  <h2 id="miniTitle"></h2>
+  <div class="mini-hud"><span id="miniScore"></span><span id="miniBest"></span></div>
+  <canvas id="miniCanvas"></canvas>
+  <p class="controls" id="miniControls"></p>
+  <button class="secondary" id="miniBack">← Game library</button>
+</section>
+
+<script src="arcade.js"></script>
+<script src="minigame.js"></script>
+<script>
+// Minesweeper: 9×9 with 10 mines; the first dig is always safe
+const mines = {
+  id: "mines", title: "💣 Minesweeper", w: 360, h: 400, n: 9, count: 10, cs: 40, top: 40,
+  controls: "Click to dig · Right-click (or F) to flag · Arrow keys + Space work too",
+  reset() {
+    this.cells = Array.from({ length: this.n * this.n }, () => ({ mine: false, open: false, flag: false, adj: 0 }));
+    this.placed = false;
+    this.t = 0;
+    this.score = 0;
+    this.cursor = 40;
+    this.ending = 0;
+    this.endText = "";
+  },
+  neighbors(i) {
+    const r = Math.floor(i / this.n), col = i % this.n, out = [];
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const rr = r + dr, cc = col + dc;
+        if ((dr || dc) && rr >= 0 && rr < this.n && cc >= 0 && cc < this.n) out.push(rr * this.n + cc);
+      }
+    }
+    return out;
+  },
+  place(safe) {
+    const keepClear = [safe, ...this.neighbors(safe)];
+    let placed = 0;
+    while (placed < this.count) {
+      const i = randInt(this.cells.length);
+      if (this.cells[i].mine || keepClear.includes(i)) continue;
+      this.cells[i].mine = true;
+      placed++;
+    }
+    this.cells.forEach((cell, i) => { cell.adj = this.neighbors(i).filter(j => this.cells[j].mine).length; });
+    this.placed = true;
+  },
+  dig(i) {
+    const cell = this.cells[i];
+    if (this.ending || cell.open || cell.flag) return;
+    if (!this.placed) this.place(i);
+    if (cell.mine) {
+      cell.boom = true;
+      this.cells.forEach(c => { if (c.mine) c.open = true; });
+      this.endText = "💥 Boom!";
+      this.ending = 1;
+      return;
+    }
+    // Flood-fill open all the empty space around a zero
+    const todo = [i];
+    while (todo.length) {
+      const c = this.cells[todo.pop()];
+      if (c.open || c.flag) continue;
+      c.open = true;
+      this.score++;
+      if (c.adj === 0) todo.push(...this.neighbors(this.cells.indexOf(c)));
+    }
+    if (this.cells.every(c => c.mine || c.open)) {
+      this.score += Math.max(0, 300 - Math.floor(this.t));   // speed bonus
+      this.endText = "🏆 Field cleared!";
+      this.ending = 1;
+    }
+  },
+  flag(i) {
+    const cell = this.cells[i];
+    if (!this.ending && !cell.open) cell.flag = !cell.flag;
+  },
+  tap(x, y, alt) {
+    const col = Math.floor(x / this.cs), row = Math.floor((y - this.top) / this.cs);
+    if (col < 0 || col >= this.n || row < 0 || row >= this.n) return;
+    this.cursor = row * this.n + col;
+    if (alt) this.flag(this.cursor); else this.dig(this.cursor);
+  },
+  key(code) {
+    this.cursor = gridMove(this.cursor, code, this.n, this.n);
+    if (code === "Space" || code === "Enter") this.dig(this.cursor);
+    if (code === "KeyF") this.flag(this.cursor);
+  },
+  update(dt) {
+    // Pause a moment on the final board before showing the result
+    if (this.ending) {
+      this.ending -= dt;
+      return this.ending > 0;
+    }
+    this.t += dt;
+    return true;
+  },
+  draw(c) {
+    const cs = this.cs;
+    c.fillStyle = "#1b1e2b";
+    c.fillRect(0, 0, this.w, this.h);
+    c.font = "bold 18px system-ui, sans-serif";
+    c.textBaseline = "middle";
+    c.fillStyle = "#fff";
+    c.textAlign = "left";
+    c.fillText(`💣 ${this.count - this.cells.filter(x => x.flag).length}`, 12, 20);
+    c.textAlign = "right";
+    c.fillText(`⏱ ${Math.floor(this.t)}`, this.w - 12, 20);
+
+    const numColors = ["", "#1f5fbf", "#2e8b57", "#d32f2f", "#512da8", "#8d2b0b", "#00838f", "#222", "#666"];
+    c.textAlign = "center";
+    this.cells.forEach((cell, i) => {
+      const x = (i % this.n) * cs, y = this.top + Math.floor(i / this.n) * cs;
+      if (cell.open) {
+        c.fillStyle = cell.boom ? "#ff3b3b" : "#d9dde8";
+        c.fillRect(x + 1, y + 1, cs - 2, cs - 2);
+        if (cell.mine) {
+          c.font = "22px system-ui, sans-serif";
+          c.fillText("💣", x + cs / 2, y + cs / 2 + 1);
+        } else if (cell.adj) {
+          c.font = "bold 22px system-ui, sans-serif";
+          c.fillStyle = numColors[cell.adj];
+          c.fillText(cell.adj, x + cs / 2, y + cs / 2 + 1);
+        }
+      } else {
+        c.fillStyle = "#7a8cc4";
+        c.fillRect(x + 1, y + 1, cs - 2, cs - 2);
+        c.fillStyle = "rgba(255,255,255,0.25)";
+        c.fillRect(x + 1, y + 1, cs - 2, 4);
+        if (cell.flag) {
+          c.font = "20px system-ui, sans-serif";
+          c.fillText("🚩", x + cs / 2, y + cs / 2 + 1);
+        }
+      }
+      if (i === this.cursor) {
+        c.strokeStyle = "#ffcc00";
+        c.lineWidth = 3;
+        c.strokeRect(x + 2, y + 2, cs - 4, cs - 4);
+      }
+    });
+    c.textBaseline = "alphabetic";
+  },
+};
+
+openMini(mines);
+</script>
+</body>
+</html>
