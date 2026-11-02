@@ -19,9 +19,9 @@
   }
   .screen[hidden] { display: none; }
   h1 {
-    font-family: "Pacifico", cursive;
-    font-weight: normal;   /* Pacifico only comes in one weight; faking bold smudges it */
-    font-size: 3em;
+    font-family: "Caveat", cursive;
+    font-weight: 700;
+    font-size: 3.6em;
     margin: 0;
   }
   h2 { margin: 0; }
