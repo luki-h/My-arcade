@@ -100,7 +100,10 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // ---------- Settings ----------
 const W = 1200, H = 800;          // world size
 const HW = 45;                    // half track width
@@ -136,15 +139,11 @@ const upgradeCost = lvl => 60 + 40 * lvl;
 // ---------- Save data ----------
 function blankPlayer() { return { coins: 0, up: { speed: 0, accel: 0, handling: 0 } }; }
 function loadSave() {
-  try {
-    const d = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (d && d.p1 && d.p2) return d;
-  } catch (e) {}
+  const d = ArcadeSave.load(SAVE_KEY);
+  if (d && d.p1 && d.p2) return d;
   return { p1: blankPlayer(), p2: blankPlayer() };
 }
-function saveGame() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
-}
+function saveGame() { ArcadeSave.save(SAVE_KEY, save); }
 let save = loadSave();
 let numPlayers = 1;
 
@@ -667,6 +666,7 @@ function finishRace() {
 
   show("results");
 }
+})();
 </script>
 </body>
 </html>

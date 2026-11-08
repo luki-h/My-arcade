@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Memory Match: find pairs against the clock; clearing a board deals a new one
 const memory = {
   id: "memory", title: "🧠 Memory Match", w: 480, h: 540, top: 60, cell: 120,
@@ -119,6 +122,7 @@ const memory = {
 };
 
 openMini(memory);
+})();
 </script>
 </body>
 </html>

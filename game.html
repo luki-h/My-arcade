@@ -177,6 +177,7 @@
 </section>
 
 <script src="boing.js"></script>
+<script src="games/save.js"></script>
 <script>
 function makeJelly(el) {
   const letters = el.textContent.split("");
@@ -196,12 +197,15 @@ function makeJelly(el) {
 }
 makeJelly(document.getElementById("libTitle"));
 
-// Each card shows that game's best score (saved by the games in localStorage, so it survives a refresh)
-let bests = {};
-try { bests = JSON.parse(localStorage.getItem("myArcadeBest")) || {}; } catch (e) {}
-document.querySelectorAll("[data-best]").forEach(el => {
-  el.textContent = `Best: ${bests[el.dataset.best] || 0}`;
-});
+// Each card shows that game's best score. Scores are read through ArcadeSave (games/save.js),
+// which ignores any save that was edited by hand, and only real numbers are shown.
+{
+  const bests = ArcadeSave.load("myArcadeBest") || {};
+  document.querySelectorAll("[data-best]").forEach(el => {
+    const best = bests[el.dataset.best];
+    el.textContent = `Best: ${Number.isFinite(best) && best >= 0 ? best : 0}`;
+  });
+}
 </script>
 </body>
 </html>

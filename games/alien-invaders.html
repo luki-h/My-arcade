@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Alien Invaders: shoot the marching aliens before they land
 const invaders = {
   id: "invaders", title: "👾 Alien Invaders", w: 480, h: 600,
@@ -145,6 +148,7 @@ const invaders = {
 };
 
 openMini(invaders);
+})();
 </script>
 </body>
 </html>

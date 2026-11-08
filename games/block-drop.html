@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Block Drop: falling-blocks puzzle, clear full lines
 const PIECES = {
   I: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]],
@@ -172,6 +175,7 @@ const tetris = {
 };
 
 openMini(tetris);
+})();
 </script>
 </body>
 </html>

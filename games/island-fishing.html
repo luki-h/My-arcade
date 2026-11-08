@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Island Fishing: sail between islands, fish with an unbreakable rod, gather resources, craft upgrades
 const SEA_W = 2400, SEA_H = 1800;
 const FISHING_SAVE_KEY = "myArcadeFishing";
@@ -122,8 +125,7 @@ const fishing = {
   // ----- Save / load -----
   reset() {
     if (!this.islands) this.setupWorld();
-    let s = null;
-    try { s = JSON.parse(localStorage.getItem(FISHING_SAVE_KEY)); } catch (e) {}
+    const s = ArcadeSave.load(FISHING_SAVE_KEY);
     this.x = s?.x ?? 600;
     this.y = s?.y ?? 430;
     this.heading = s?.heading ?? 0;
@@ -150,7 +152,7 @@ const fishing = {
     if (this.mode === "walk" && !this.island) return;
     const data = { x: this.x, y: this.y, heading: this.heading, inv: this.inv, up: this.up, log: this.log,
       caught: this.caught, visited: this.visited, score: this.score };
-    try { localStorage.setItem(FISHING_SAVE_KEY, JSON.stringify(data)); } catch (e) {}
+    ArcadeSave.save(FISHING_SAVE_KEY, data);
   },
   leave() { this.persist(); },
 
@@ -817,6 +819,7 @@ const fishing = {
 };
 
 openMini(fishing);
+})();
 </script>
 </body>
 </html>

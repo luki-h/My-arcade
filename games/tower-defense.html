@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Tower Defense: build towers beside the road and stop 20 waves reaching the castle
 const TD_COLS = 16, TD_ROWS = 12, TD_TILE = 40, TD_TOP = 40, TD_WAVES = 20;
 const TD_PATH = [[-1, 2], [4, 2], [4, 8], [9, 8], [9, 3], [13, 3], [13, 9], [15, 9]];   // tile corners of the road
@@ -877,6 +880,7 @@ const td = {
 };
 
 openMini(td);
+})();
 </script>
 </body>
 </html>

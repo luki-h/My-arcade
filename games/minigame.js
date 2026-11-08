@@ -1,11 +1,13 @@
 // The mini-game frame: start screen, score, best score, game over, Esc to leave.
 // Each game page defines its game object and calls openMini(game).
 
+// Everything lives inside this function so scores can't be changed from the browser console.
+// Only openMini() and miniPlaying() are shared with the game pages.
+(() => {
 // ---------- Mini games ----------
 const BEST_KEY = "myArcadeBest";
-let bests = {};
-try { bests = JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch (e) {}
-const saveBests = () => { try { localStorage.setItem(BEST_KEY, JSON.stringify(bests)); } catch (e) {} };
+const bests = ArcadeSave.load(BEST_KEY) || {};
+const saveBests = () => ArcadeSave.save(BEST_KEY, bests);
 
 const miniCanvas = document.getElementById("miniCanvas");
 const mctx = miniCanvas.getContext("2d");
@@ -152,3 +154,7 @@ function drawMini() {
 addEventListener("keydown", e => {
   if (mini && (!e.repeat || mini.game.repeatKeys)) miniKey(e.code, e.repeat);
 });
+
+window.openMini = openMini;
+window.miniPlaying = () => mini?.state === "playing";
+})();

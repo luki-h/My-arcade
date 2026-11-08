@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Space Dodge: slide left/right, don't get hit by asteroids
 const dodge = {
   id: "dodge", title: "🚀 Space Dodge", w: 480, h: 640,
@@ -82,7 +85,7 @@ const dodge = {
 
     c.save();
     c.translate(this.x, this.h - 60);
-    if (mini.state === "playing") {
+    if (miniPlaying()) {
       c.fillStyle = Math.random() < 0.5 ? "#ff9f43" : "#ffcc00";
       c.beginPath(); c.moveTo(-7, 12); c.lineTo(7, 12); c.lineTo(0, 24 + Math.random() * 8); c.fill();
     }
@@ -95,6 +98,7 @@ const dodge = {
 };
 
 openMini(dodge);
+})();
 </script>
 </body>
 </html>

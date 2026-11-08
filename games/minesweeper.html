@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Minesweeper: 9×9 with 10 mines; the first dig is always safe
 const mines = {
   id: "mines", title: "💣 Minesweeper", w: 360, h: 400, n: 9, count: 10, cs: 40, top: 40,
@@ -155,6 +158,7 @@ const mines = {
 };
 
 openMini(mines);
+})();
 </script>
 </body>
 </html>

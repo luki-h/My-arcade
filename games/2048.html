@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // 2048: slide tiles, equal numbers merge
 const TILE_COLORS = {
   2: "#eee4da", 4: "#ede0c8", 8: "#f2b179", 16: "#f59563", 32: "#f67c5f", 64: "#f65e3b",
@@ -116,6 +119,7 @@ const g2048 = {
 };
 
 openMini(g2048);
+})();
 </script>
 </body>
 </html>

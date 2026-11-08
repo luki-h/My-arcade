@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Penalty Kicks: shoot when the sweeping target is where you want it
 const penalty = {
   id: "penalty", title: "⚽ Penalty Kicks", w: 480, h: 560,
@@ -158,6 +161,7 @@ const penalty = {
 };
 
 openMini(penalty);
+})();
 </script>
 </body>
 </html>

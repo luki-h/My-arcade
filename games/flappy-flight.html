@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Flappy Flight: flap through the pipe gaps
 const flappy = {
   id: "flappy", title: "🐦 Flappy Flight", w: 400, h: 600, gap: 160, pw: 60, bx: 100,
@@ -108,6 +111,7 @@ const flappy = {
 };
 
 openMini(flappy);
+})();
 </script>
 </body>
 </html>

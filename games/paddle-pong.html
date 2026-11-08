@@ -20,8 +20,11 @@
 </section>
 
 <script src="arcade.js"></script>
+<script src="save.js"></script>
 <script src="minigame.js"></script>
 <script>
+// Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
+(() => {
 // Paddle Pong: you vs the computer, first to 7
 const pong = {
   id: "pong", title: "🏓 Paddle Pong", w: 640, h: 420, ph: 80, win: 7,
@@ -110,6 +113,7 @@ const pong = {
 };
 
 openMini(pong);
+})();
 </script>
 </body>
 </html>
