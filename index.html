@@ -14,13 +14,10 @@
     align-items: center;
     justify-content: center;
     overflow-x: hidden;
-    /* Galaxy: nebula clouds over deep space */
-    background:
-      radial-gradient(ellipse at 20% 30%, rgba(140, 60, 220, 0.45), transparent 55%),
-      radial-gradient(ellipse at 80% 70%, rgba(40, 110, 230, 0.4), transparent 55%),
-      radial-gradient(ellipse at 60% 20%, rgba(230, 60, 160, 0.25), transparent 50%),
-      linear-gradient(160deg, #05030f, #0d0a2b 50%, #04020c);
-    background-attachment: fixed;
+    /* Soft cream paper, with pink boxes outlined in dark ink */
+    --ink: #2a2140;
+    --pink: #f8d6e5;
+    background: #fcf3dc;
   }
   #stars {
     position: fixed;
@@ -34,7 +31,8 @@
     padding: 14px 32px;
     border-radius: 12px;
     text-decoration: none;
-    box-shadow: 0 0 20px rgba(255, 204, 0, 0.6);
+    border: 3px solid var(--ink);
+    box-shadow: 0 4px 0 var(--ink);
   }
   .play-btn:hover {
     filter: brightness(1.1);
@@ -46,15 +44,15 @@
     text-align: center;
     padding: 0.2em 0.6em;
     border-radius: 20px;
-    /* Dark backing so the letters never blend into the galaxy */
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--pink);
+    border: 4px solid var(--ink);
   }
   #title span {
     display: inline-block;
     cursor: pointer;
-    -webkit-text-stroke: 2px #000;
+    -webkit-text-stroke: 2px var(--ink);
     paint-order: stroke fill;
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.7), 0 3px 6px #000;
+    text-shadow: 0 3px 0 var(--ink);
   }
   #title span.bounce {
     animation: jelly 0.8s ease;
@@ -82,9 +80,9 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    border: none;
+    border: 3px solid var(--ink);
     border-radius: 14px;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--pink);
     cursor: pointer;
     transition: transform 0.2s ease;
   }
@@ -252,7 +250,7 @@
     title.appendChild(span);
   });
 
-  // Twinkling starfield
+  // Twinkling pink sparkles
   const canvas = document.getElementById("stars");
   const ctx = canvas.getContext("2d");
   let stars = [];
@@ -273,8 +271,8 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (const s of stars) {
       s.phase += s.speed;
-      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(s.phase);
-      ctx.fillStyle = "#fff";
+      ctx.globalAlpha = 0.35 + 0.35 * Math.sin(s.phase);
+      ctx.fillStyle = "#e86fa8";
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
       ctx.fill();
