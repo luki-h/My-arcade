@@ -65,7 +65,7 @@
     85% { transform: scale(0.97, 1.03); }
   }
 
-  /* Tasty hamburger menu button: bun, lettuce, cheese, patty, bun */
+  /* Tasty hamburger menu button: bun, lettuce, cheese, ketchup, patty, bun */
   .burger {
     position: fixed;
     top: 16px;
@@ -119,6 +119,24 @@
     border: 4px solid transparent;
     border-top: 6px solid #ffd21f;
   }
+  .ketchup {
+    position: relative;
+    z-index: 1;   /* so the drip shows on top of the patty */
+    width: 40px;
+    height: 3px;
+    border-radius: 3px;
+    background: #e0251b;
+  }
+  .ketchup::after {   /* ketchup drip */
+    content: "";
+    position: absolute;
+    right: 9px;
+    top: 2px;
+    width: 4px;
+    height: 5px;
+    border-radius: 0 0 3px 3px;
+    background: #e0251b;
+  }
   .patty { width: 44px; height: 8px; border-radius: 5px; background: #6b3a1f; box-shadow: inset 0 -2px 0 #4a2612; }
   .bun-bottom { width: 40px; height: 8px; border-radius: 3px 3px 10px 10px; background: #e8a33d; box-shadow: inset 0 -2px 0 #c9852a; }
   /* When the menu is open the burger opens up */
@@ -167,7 +185,7 @@
 </style>
 
 <button class="burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="menu">
-  <span class="bun-top"></span><span class="lettuce"></span><span class="cheese"></span><span class="patty"></span><span class="bun-bottom"></span>
+  <span class="bun-top"></span><span class="lettuce"></span><span class="cheese"></span><span class="ketchup"></span><span class="patty"></span><span class="bun-bottom"></span>
 </button>
 <nav class="menu" id="menu" aria-label="Games">
   <h2>Menu</h2>
