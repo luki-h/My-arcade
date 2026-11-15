@@ -41,6 +41,15 @@
   }
   .card .icon { font-size: 3em; }
   .card .best { color: #ffcc00; font-weight: 700; }
+
+  /* Small red button at the very bottom that wipes all progress */
+  .reset-btn {
+    margin-top: 40px;
+    font-size: 0.8em;
+    padding: 6px 12px;
+    background: #c62828;
+    color: #fff;
+  }
 </style>
 </head>
 <body>
@@ -175,6 +184,7 @@
     </div>
   </div>
   <a href="index.html">← Back to home</a>
+  <button class="reset-btn" id="resetBtn">🗑️ Delete progress and restart</button>
 </section>
 
 <script src="boing.js"></script>
@@ -207,6 +217,21 @@ makeJelly(document.getElementById("libTitle"));
     el.textContent = `Best: ${Number.isFinite(best) && best >= 0 ? best : 0}`;
   });
 }
+
+// Delete progress: two "are you sure?" yeses, then you must type Restart (capital R) exactly
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (!confirm("Delete ALL your progress? Best scores, coins, upgrades and your fishing trip will be gone.")) return;
+  if (!confirm("Are you really sure? This can't be undone.")) return;
+  const typed = prompt('Type "Restart" (with a capital R) to delete everything:');
+  if (typed === null) return;
+  if (typed.trim() !== "Restart") {
+    alert('That wasn\'t "Restart", so nothing was deleted.');
+    return;
+  }
+  ArcadeSave.clearAll();
+  alert("All progress deleted. Fresh start!");
+  location.reload();
+});
 </script>
 </body>
 </html>

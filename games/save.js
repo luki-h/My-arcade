@@ -37,6 +37,11 @@
     return null;
   }
 
+  // Wipes every game's progress (best scores, coins, fishing trip) for a fresh start
+  function clearAll() {
+    for (const key of SAVE_KEYS) try { localStorage.removeItem(key); } catch (e) {}
+  }
+
   // Older versions saved plain, unchecked data. Sign those once so nobody loses their progress.
   try {
     if (!localStorage.getItem(SIGNED_MARK)) {
@@ -51,5 +56,5 @@
   } catch (e) {}
 
   // Can't be replaced or changed from the console
-  Object.defineProperty(window, "ArcadeSave", { value: Object.freeze({ load, save }) });
+  Object.defineProperty(window, "ArcadeSave", { value: Object.freeze({ load, save, clearAll }) });
 })();
