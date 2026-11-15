@@ -33,8 +33,9 @@ leaderboard says "Leaderboards aren't switched on yet".
 3. Sign out and back in. The home page menu now has a **🛠️ Admin** link.
 
 ## Good to know
-- **Passwords are stored scrambled**, so nobody, including the admin, can read them. If a player
-  forgets theirs, the admin sets a new one on the Admin page.
+- **The admin can see players' passwords** on the Admin page ("Show passwords"), and the sign-in screen
+  tells players so. Players who joined before this feature show "not saved yet" until they sign in again.
+  The admin can also set a new password for anyone.
 - 5 wrong passwords in a row locks that account for 5 minutes, so nobody can guess passwords.
 - **"This week"** leaderboards start over every Monday at 00:00 UTC (Sunday evening in the US).
 - A leaderboard score is the player's best score in that game, plus any points the admin added or removed.

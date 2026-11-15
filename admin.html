@@ -22,6 +22,9 @@
   .msg.bad { color: #ff8a8a; }
   .players { margin: 0; padding-left: 1.4em; color: #cfd3ea; line-height: 1.6; }
   .players .tag { color: #ffcc00; font-size: 0.85em; }
+  .players .pw { font-family: ui-monospace, Menlo, monospace; color: #fff; background: #1b1e2b; padding: 1px 6px; border-radius: 5px; }
+  .players .pw.none { font-family: inherit; color: #aab0cc; background: none; padding: 0; font-size: 0.85em; }
+  .box label.show-pw { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
   .ac-board { width: 100%; margin: 0; background: #22263a; }
   @media (max-width: 480px) { .row2 { grid-template-columns: 1fr; } }
 </style>
@@ -50,7 +53,7 @@
 
       <div class="box">
         <h2>🔑 Reset a password</h2>
-        <p class="hint">Passwords are stored scrambled, so nobody can see them, including you. If someone forgets theirs, give them a new one here. They'll be signed out and must use the new password.</p>
+        <p class="hint">If someone forgets their password, look it up in the player list below, or give them a new one here. They'll be signed out and must use the new password.</p>
         <div class="row2">
           <label>Player <select id="pwPlayer"></select></label>
           <label>New password <span class="hint">at least 4 characters</span><input id="pwNew" autocomplete="off" maxlength="72"></label>
@@ -61,6 +64,7 @@
 
       <div class="box">
         <h2 id="plTitle">👥 Players</h2>
+        <label class="show-pw"><input type="checkbox" id="showPw"> Show passwords</label>
         <ol class="players" id="plList"></ol>
       </div>
     </div>
@@ -84,13 +88,17 @@
   const say = (el, text, good) => { el.textContent = text; el.className = "msg " + (good ? "good" : "bad"); };
   const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
 
+  const EVERY = "every";
+  $("ptGame").appendChild(option(EVERY, "⭐ Every game"));
   GAMES.forEach(([id, title]) => $("ptGame").appendChild(option(id, title)));
+  $("ptGame").value = GAMES[0][0];
 
   // Show the chosen game's leaderboard, so you can see the change right away
+  // (there's no single board for "Every game", so none is shown then)
   let board = null;
   function showBoard() {
     board?.el.remove();
-    board = Arcade.leaderboard($("ptBoard"), $("ptGame").value);
+    board = $("ptGame").value === EVERY ? null : Arcade.leaderboard($("ptBoard"), $("ptGame").value);
   }
   $("ptGame").addEventListener("change", showBoard);
 
@@ -114,29 +122,58 @@
       if (keep) sel.value = keep;
     }
     $("plTitle").textContent = `👥 Players (${players.length})`;
-    $("plList").replaceChildren(...players.map(pl => {
-      const li = document.createElement("li");
-      li.textContent = `${pl.name} · joined ${new Date(pl.created_at).toLocaleDateString()} `;
-      if (pl.is_admin) li.appendChild(Object.assign(document.createElement("span"), { className: "tag", textContent: "admin" }));
-      return li;
-    }));
+    showPlayers();
     if (!board) showBoard();
   }
   Arcade.onPlayer(load);
+
+  // Player list; passwords stay hidden until "Show passwords" is ticked
+  function showPlayers() {
+    const show = $("showPw").checked;
+    $("plList").replaceChildren(...players.map(pl => {
+      const li = document.createElement("li");
+      li.textContent = `${pl.name} · joined ${new Date(pl.created_at).toLocaleDateString()} · password: `;
+      const pw = document.createElement("span");
+      if (pl.password == null) {
+        pw.className = "pw none";
+        pw.textContent = "not saved yet (they need to sign in once)";
+      } else {
+        pw.className = "pw";
+        pw.textContent = show ? pl.password : "••••••";
+      }
+      li.appendChild(pw);
+      if (pl.is_admin) li.append(" ", Object.assign(document.createElement("span"), { className: "tag", textContent: "admin" }));
+      return li;
+    }));
+  }
+  $("showPw").addEventListener("change", showPlayers);
 
   $("ptGo").addEventListener("click", async () => {
     const points = Number($("ptPoints").value);
     const who = $("ptPlayer").selectedOptions[0]?.textContent;
     if (!who) return say($("ptMsg"), "Pick a player.");
     if (!Number.isInteger(points) || points === 0) return say($("ptMsg"), "Type a whole number of points, like 50 or -50.");
+    const every = $("ptGame").value === EVERY;
+    const games = every ? GAMES.map(([id]) => id) : [$("ptGame").value];
+    const change = `${points > 0 ? "add" : "remove"} ${Math.abs(points)} points ${points > 0 ? "to" : "from"} ${who}`;
+    if (every && !confirm(`${change[0].toUpperCase() + change.slice(1)} in all ${games.length} games?`)) return;
+    $("ptGo").disabled = true;
+    let done = 0;
     try {
-      await Arcade.admin.adjustPoints($("ptPlayer").value, $("ptGame").value, points, $("ptReason").value);
-      say($("ptMsg"), `${points > 0 ? "Added" : "Removed"} ${Math.abs(points)} points ${points > 0 ? "to" : "from"} ${who} in ${$("ptGame").selectedOptions[0].textContent}.`, true);
+      for (const game of games) {
+        if (every) say($("ptMsg"), `Working… ${done} of ${games.length} games`, true);
+        await Arcade.admin.adjustPoints($("ptPlayer").value, game, points, $("ptReason").value);
+        done++;
+      }
+      say($("ptMsg"), `${points > 0 ? "Added" : "Removed"} ${Math.abs(points)} points ${points > 0 ? "to" : "from"} ${who} in ${every ? `all ${games.length} games` : $("ptGame").selectedOptions[0].textContent}.`, true);
       $("ptPoints").value = "";
       $("ptReason").value = "";
       board?.refresh();
     } catch (e) {
-      say($("ptMsg"), e.message);
+      // If it stops partway, say how far it got so nothing is done twice by accident
+      say($("ptMsg"), every && done ? `${e.message} (it stopped after ${done} of ${games.length} games)` : e.message);
+    } finally {
+      $("ptGo").disabled = false;
     }
   });
 
@@ -150,6 +187,7 @@
       await Arcade.admin.resetPassword($("pwPlayer").value, pw);
       say($("pwMsg"), `Done. Tell ${who} their new password. They're signed out everywhere until they use it.`, true);
       $("pwNew").value = "";
+      load();   // so the list shows the new password
     } catch (e) {
       say($("pwMsg"), e.message);
     }

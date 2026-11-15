@@ -23,8 +23,8 @@ insert into public.games (id, title) values
 on conflict (id) do update set title = excluded.title;
 
 -- ---------- Players ----------
--- Passwords are stored scrambled (bcrypt hash), so nobody can read them, not even the admin.
--- If someone forgets theirs, the admin sets a new one (admin_reset_password).
+-- Passwords are checked with a scrambled copy (bcrypt hash). A readable copy is also kept so the
+-- admin can look passwords up on the Admin page; the sign-in screen tells players this.
 create table if not exists public.players (
   id uuid primary key default gen_random_uuid(),
   first_name text not null,
@@ -36,6 +36,9 @@ create table if not exists public.players (
   locked_until timestamptz,                 -- too many wrong passwords: wait until this time
   created_at timestamptz not null default now()
 );
+-- Readable copy of the password, shown to the admin. Players who joined before this was added get
+-- theirs saved the next time they sign in.
+alter table public.players add column if not exists password_plain text;
 
 create table if not exists public.sessions (
   token text primary key,
@@ -121,8 +124,8 @@ begin
   if exists (select 1 from public.players where login_name = public.login_name(f, l)) then
     return json_build_object('error', 'Someone already has that name. Add your last name, or sign in if it''s you.');
   end if;
-  insert into public.players (first_name, last_name, login_name, password_hash)
-    values (f, l, public.login_name(f, l), extensions.crypt(p_password, extensions.gen_salt('bf')))
+  insert into public.players (first_name, last_name, login_name, password_hash, password_plain)
+    values (f, l, public.login_name(f, l), extensions.crypt(p_password, extensions.gen_salt('bf')), p_password)
     returning * into p;
   return json_build_object('token', public.new_session(p.id), 'player', public.player_json(p));
 end $$;
@@ -144,7 +147,7 @@ begin
       where id = p.id;
     return json_build_object('error', 'Wrong name or password.');
   end if;
-  update public.players set failed_logins = 0, locked_until = null where id = p.id;
+  update public.players set failed_logins = 0, locked_until = null, password_plain = p_password where id = p.id;
   return json_build_object('token', public.new_session(p.id), 'player', public.player_json(p));
 end $$;
 
@@ -207,12 +210,13 @@ begin
   return me;
 end $$;
 
-create or replace function public.admin_players(p_token text)
-returns table (id uuid, name text, created_at timestamptz, is_admin boolean)
+drop function if exists public.admin_players(text);   -- its columns changed, so it's remade
+create function public.admin_players(p_token text)
+returns table (id uuid, name text, created_at timestamptz, is_admin boolean, password text)
 language plpgsql stable security definer set search_path = '' as $$
 declare me public.players := public.session_admin(p_token);
 begin
-  return query select p.id, p.first_name || coalesce(' ' || p.last_name, ''), p.created_at, p.is_admin
+  return query select p.id, p.first_name || coalesce(' ' || p.last_name, ''), p.created_at, p.is_admin, p.password_plain
     from public.players p order by p.first_name, p.last_name;
 end $$;
 
@@ -225,7 +229,7 @@ begin
     values (p_player, p_game, p_points, nullif(trim(p_reason), ''), me.id);
 end $$;
 
--- Sets a new password for a player who forgot theirs (stored scrambled like every password).
+-- Sets a new password for a player who forgot theirs.
 -- It also signs them out everywhere, so they have to use the new password.
 create or replace function public.admin_reset_password(p_token text, p_player uuid, p_new_password text)
 returns void
@@ -236,7 +240,8 @@ begin
     raise exception 'The new password needs at least 4 characters';
   end if;
   update public.players
-    set password_hash = extensions.crypt(p_new_password, extensions.gen_salt('bf')), failed_logins = 0, locked_until = null
+    set password_hash = extensions.crypt(p_new_password, extensions.gen_salt('bf')), password_plain = p_new_password,
+        failed_logins = 0, locked_until = null
     where id = p_player;
   if not found then raise exception 'No player with that id'; end if;
   delete from public.sessions where player = p_player;

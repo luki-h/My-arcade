@@ -73,6 +73,7 @@
         <p class="ac-error" role="alert"></p>
         <button type="submit" class="ac-go">Sign in</button>
         <p class="ac-hint"></p>
+        <p class="ac-fine">The admin can see your password, so don't use one you use anywhere else.</p>
       </form>`;
     const form = gate.querySelector("form");
     const err = gate.querySelector(".ac-error");
@@ -85,8 +86,8 @@
       go.textContent = m === "in" ? "Sign in" : "Sign up";
       form.password.autocomplete = m === "in" ? "current-password" : "new-password";
       hint.textContent = m === "in"
-        ? "Use the same first and last name you signed up with. Forgot your password? Ask the admin to reset it."
-        : "Your name will show on the leaderboards. Pick a password with at least 4 characters, and don't use one you use anywhere else.";
+        ? "Use the same first and last name you signed up with. Forgot your password? Ask the admin."
+        : "Your name will show on the leaderboards. Pick a password with at least 4 characters.";
       err.textContent = "";
     }
     gate.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
@@ -255,6 +256,7 @@
     .ac-go:disabled { opacity: 0.6; cursor: wait; }
     .ac-error { margin: 0; min-height: 1.2em; color: #ff8a8a; font-weight: 600; font-size: 0.9em; }
     .ac-hint { margin: 0; color: #aab0cc; font-size: 0.82em; line-height: 1.4; }
+    .ac-fine { margin: -4px 0 0; color: #8a90ad; font-size: 11px; line-height: 1.3; }   /* small print, but still readable */
     .ac-board { width: min(420px, 100%); margin: 8px auto 0; padding: 14px 16px; border-radius: 14px; background: #2a2f45;
       color: #fff; font-family: system-ui, -apple-system, sans-serif; text-align: left; }
     .ac-board-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
