@@ -1,3 +1,5 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -183,6 +185,19 @@
   .menu a:hover, .menu a:focus-visible { background: rgba(255, 255, 255, 0.12); outline: none; }
   .menu a.main { color: #222; background: #ffcc00; font-weight: bold; margin-bottom: 10px; }
   .menu a.main:hover { filter: brightness(1.1); }
+  /* Small red button at the very bottom of the menu that wipes all progress */
+  .menu .reset-btn {
+    display: block;
+    margin: 28px auto 0;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 8px;
+    background: #c62828;
+    color: #fff;
+    font: bold 0.8em system-ui, -apple-system, sans-serif;
+    cursor: pointer;
+  }
+  .menu .reset-btn:hover { filter: brightness(1.15); }
 </style>
 
 <button class="burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="menu">
@@ -209,6 +224,7 @@
   <a href="games/tower-defense.html">🏰 Tower Defense</a>
   <a href="games/island-fishing.html">🎣 Island Fishing</a>
   <a href="games/tasty-hamburger.html">🍔 Tasty Hamburger</a>
+  <button class="reset-btn" id="resetBtn">🗑️ Delete progress and restart</button>
 </nav>
 
 <canvas id="stars"></canvas>
@@ -216,6 +232,7 @@
 <a class="play-btn" href="game.html">Play Games</a>
 
 <script src="boing.js"></script>
+<script src="games/save.js"></script>
 <script>
   const title = document.getElementById("title");
   const letters = title.textContent.split("");
@@ -290,5 +307,20 @@
   });
   addEventListener("click", e => {
     if (menu.classList.contains("open") && !menu.contains(e.target) && !burger.contains(e.target)) setMenu(false);
+  });
+
+  // Delete progress: two "are you sure?" yeses, then you must type Restart (capital R) exactly
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    if (!confirm("Delete ALL your progress? Best scores, coins, upgrades and your fishing trip will be gone.")) return;
+    if (!confirm("Are you really sure? This can't be undone.")) return;
+    const typed = prompt('Type "Restart" (with a capital R) to delete everything:');
+    if (typed === null) return;
+    if (typed.trim() !== "Restart") {
+      alert('That wasn\'t "Restart", so nothing was deleted.');
+      return;
+    }
+    ArcadeSave.clearAll();
+    alert("All progress deleted. Fresh start!");
+    location.reload();
   });
 </script>
