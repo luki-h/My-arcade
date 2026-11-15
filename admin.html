@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin – My Arcade</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="games/arcade.css">
+<style>
+  .admin { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 16px; text-align: left; }
+  .admin h1 { text-align: center; font-family: system-ui, -apple-system, sans-serif; font-size: 2em; }
+  .box { background: #2a2f45; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .box h2 { font-size: 1.15em; }
+  .box label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 0.95em; }
+  .box .hint { font-weight: 400; color: #aab0cc; font-size: 0.85em; }
+  .box select, .box input { font: inherit; font-weight: 400; padding: 8px 10px; border-radius: 8px; border: 2px solid #454b68;
+    background: #1b1e2b; color: #fff; }
+  .box select:focus, .box input:focus { outline: none; border-color: #ffcc00; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .msg { margin: 0; min-height: 1.2em; font-weight: 600; }
+  .msg.good { color: #4cd964; }
+  .msg.bad { color: #ff8a8a; }
+  .players { margin: 0; padding-left: 1.4em; color: #cfd3ea; line-height: 1.6; }
+  .players .tag { color: #ffcc00; font-size: 0.85em; }
+  .ac-board { width: 100%; margin: 0; background: #22263a; }
+  @media (max-width: 480px) { .row2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<section class="screen">
+  <div class="admin">
+    <h1>🛠️ Admin</h1>
+    <p class="msg" id="status">Checking…</p>
+
+    <div id="tools" hidden>
+      <div class="box">
+        <h2>➕ Add or remove points</h2>
+        <div class="row2">
+          <label>Player <select id="ptPlayer"></select></label>
+          <label>Game <select id="ptGame"></select></label>
+        </div>
+        <div class="row2">
+          <label>Points <span class="hint">e.g. 50 to add, -50 to remove</span><input id="ptPoints" type="number" step="1"></label>
+          <label>Reason <span class="hint">(optional)</span><input id="ptReason" maxlength="100"></label>
+        </div>
+        <button id="ptGo">Change points</button>
+        <p class="msg" id="ptMsg"></p>
+        <div id="ptBoard"></div>
+      </div>
+
+      <div class="box">
+        <h2>🔑 Reset a password</h2>
+        <p class="hint">Passwords are stored scrambled, so nobody can see them, including you. If someone forgets theirs, give them a new one here. They'll be signed out and must use the new password.</p>
+        <div class="row2">
+          <label>Player <select id="pwPlayer"></select></label>
+          <label>New password <span class="hint">at least 4 characters</span><input id="pwNew" autocomplete="off" maxlength="72"></label>
+        </div>
+        <button id="pwGo">Set new password</button>
+        <p class="msg" id="pwMsg"></p>
+      </div>
+
+      <div class="box">
+        <h2 id="plTitle">👥 Players</h2>
+        <ol class="players" id="plList"></ol>
+      </div>
+    </div>
+
+    <a href="index.html">← Back to home</a>
+  </div>
+</section>
+
+<script src="games/arcade-config.js"></script>
+<script src="games/accounts.js"></script>
+<script>
+(() => {
+  const GAMES = [
+    ["dodge", "🚀 Space Dodge"], ["stack", "🧱 Block Stack"], ["snake", "🐍 Snake"], ["pong", "🏓 Paddle Pong"],
+    ["flappy", "🐦 Flappy Flight"], ["memory", "🧠 Memory Match"], ["invaders", "👾 Alien Invaders"],
+    ["penalty", "⚽ Penalty Kicks"], ["tetris", "🟦 Block Drop"], ["2048", "🔢 2048"], ["breakout", "🟧 Brick Breaker"],
+    ["mines", "💣 Minesweeper"], ["ttt", "❌ Tic-Tac-Toe"], ["dino", "🦖 Dino Run"], ["td", "🏰 Tower Defense"],
+    ["fishing", "🎣 Island Fishing"], ["racing", "🏎️ Coin Rush Racing"], ["hamburger", "🍔 Tasty Hamburger"],
+  ];
+  const $ = id => document.getElementById(id);
+  const say = (el, text, good) => { el.textContent = text; el.className = "msg " + (good ? "good" : "bad"); };
+  const option = (value, text) => Object.assign(document.createElement("option"), { value, textContent: text });
+
+  GAMES.forEach(([id, title]) => $("ptGame").appendChild(option(id, title)));
+
+  // Show the chosen game's leaderboard, so you can see the change right away
+  let board = null;
+  function showBoard() {
+    board?.el.remove();
+    board = Arcade.leaderboard($("ptBoard"), $("ptGame").value);
+  }
+  $("ptGame").addEventListener("change", showBoard);
+
+  let players = [];
+  async function load() {
+    const p = Arcade.player();
+    if (!Arcade.ready) return say($("status"), "Accounts aren't switched on yet. See SETUP.md.");
+    if (!p) return say($("status"), "Please sign in.");
+    if (!p.isAdmin) { $("tools").hidden = true; return say($("status"), "Only the admin can use this page."); }
+    try {
+      players = await Arcade.admin.players();
+    } catch (e) {
+      $("tools").hidden = true;
+      return say($("status"), e.message);
+    }
+    say($("status"), `Signed in as ${p.name}.`, true);
+    $("tools").hidden = false;
+    for (const sel of [$("ptPlayer"), $("pwPlayer")]) {
+      const keep = sel.value;
+      sel.replaceChildren(...players.map(pl => option(pl.id, pl.name)));
+      if (keep) sel.value = keep;
+    }
+    $("plTitle").textContent = `👥 Players (${players.length})`;
+    $("plList").replaceChildren(...players.map(pl => {
+      const li = document.createElement("li");
+      li.textContent = `${pl.name} · joined ${new Date(pl.created_at).toLocaleDateString()} `;
+      if (pl.is_admin) li.appendChild(Object.assign(document.createElement("span"), { className: "tag", textContent: "admin" }));
+      return li;
+    }));
+    if (!board) showBoard();
+  }
+  Arcade.onPlayer(load);
+
+  $("ptGo").addEventListener("click", async () => {
+    const points = Number($("ptPoints").value);
+    const who = $("ptPlayer").selectedOptions[0]?.textContent;
+    if (!who) return say($("ptMsg"), "Pick a player.");
+    if (!Number.isInteger(points) || points === 0) return say($("ptMsg"), "Type a whole number of points, like 50 or -50.");
+    try {
+      await Arcade.admin.adjustPoints($("ptPlayer").value, $("ptGame").value, points, $("ptReason").value);
+      say($("ptMsg"), `${points > 0 ? "Added" : "Removed"} ${Math.abs(points)} points ${points > 0 ? "to" : "from"} ${who} in ${$("ptGame").selectedOptions[0].textContent}.`, true);
+      $("ptPoints").value = "";
+      $("ptReason").value = "";
+      board?.refresh();
+    } catch (e) {
+      say($("ptMsg"), e.message);
+    }
+  });
+
+  $("pwGo").addEventListener("click", async () => {
+    const pw = $("pwNew").value;
+    const who = $("pwPlayer").selectedOptions[0]?.textContent;
+    if (!who) return say($("pwMsg"), "Pick a player.");
+    if (pw.length < 4) return say($("pwMsg"), "The new password needs at least 4 characters.");
+    if (!confirm(`Give ${who} the new password "${pw}"?`)) return;
+    try {
+      await Arcade.admin.resetPassword($("pwPlayer").value, pw);
+      say($("pwMsg"), `Done. Tell ${who} their new password. They're signed out everywhere until they use it.`, true);
+      $("pwNew").value = "";
+    } catch (e) {
+      say($("pwMsg"), e.message);
+    }
+  });
+})();
+</script>
+</body>
+</html>

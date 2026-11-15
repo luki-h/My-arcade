@@ -14,6 +14,7 @@ const mctx = miniCanvas.getContext("2d");
 let mini = null;
 let miniScale = 1;
 let miniRaf = 0;
+let board = null;   // the online leaderboard under the game
 
 function openMini(game) {
   document.activeElement?.blur();
@@ -22,6 +23,7 @@ function openMini(game) {
   document.getElementById("miniTitle").textContent = game.title;
   document.getElementById("miniControls").textContent = game.controls + " · Esc to leave";
   show("mini");
+  if (!board) board = Arcade.leaderboard(document.getElementById("mini"), game.id);
   resizeMini();
   cancelAnimationFrame(miniRaf);
   miniRaf = requestAnimationFrame(miniLoop);
@@ -39,7 +41,10 @@ function recordBest() {
 
 function closeMini() {
   const g = mini.game;
-  if (mini.state === "playing") recordBest();
+  if (mini.state === "playing") {
+    recordBest();
+    Arcade.submitScore(g.id, g.score);
+  }
   g.leave?.();
   mini = null;
   cancelAnimationFrame(miniRaf);
@@ -55,6 +60,7 @@ function startMini() {
 function endMini() {
   mini.state = "over";
   recordBest();
+  Arcade.submitScore(mini.game.id, mini.game.score);
 }
 
 function miniKey(code, repeat) {

@@ -1271,6 +1271,7 @@
     document.getElementById('death-reason').textContent = reason;
     const days = dayNumber();
     document.getElementById('survived').textContent = `You survived until day ${days}.`;
+    window.Arcade?.submitScore('hamburger', days);
     show('gameover', true);
   }
 

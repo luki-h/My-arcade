@@ -102,6 +102,8 @@
 
 <script src="arcade.js"></script>
 <script src="save.js"></script>
+<script src="arcade-config.js"></script>
+<script src="accounts.js"></script>
 <script>
 // Wrapped in a function so the game's variables (score, coins…) can't be changed from the browser console
 (() => {
@@ -147,6 +149,8 @@ function loadSave() {
 function saveGame() { ArcadeSave.save(SAVE_KEY, save); }
 let save = loadSave();
 let numPlayers = 1;
+Arcade.leaderboard(document.getElementById("mode"), "racing");
+Arcade.leaderboard(document.getElementById("results"), "racing");
 
 document.getElementById("modeBack").onclick = () => location.href = "../game.html";
 document.getElementById("onePlayer").onclick = () => { numPlayers = 1; openGarage(); };
@@ -632,6 +636,7 @@ function finishRace() {
 
   const resultsWrap = document.getElementById("playerResults");
   resultsWrap.innerHTML = "";
+  let p1Earned = 0;
   order.forEach((car, i) => {
     if (!car.human) return;
     const place = i + 1;
@@ -640,6 +645,7 @@ function finishRace() {
     const accCoins = Math.round(acc * ACCURACY_COINS);
     const earned = placeCoins + accCoins;
     save[car.pid].coins += earned;
+    if (car.pid === "p1") p1Earned = earned;
 
     const won = place <= 3;
     const panel = document.createElement("div");
@@ -654,6 +660,8 @@ function finishRace() {
     resultsWrap.appendChild(panel);
   });
   saveGame();
+  // Online leaderboard: coins earned in one race (P1 is the signed-in player; P2 is a guest)
+  Arcade.submitScore("racing", p1Earned);
 
   const list = document.getElementById("standings");
   list.innerHTML = "";

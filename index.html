@@ -211,6 +211,28 @@
     cursor: pointer;
   }
   .menu .reset-btn:hover { filter: brightness(1.15); }
+  /* Who's signed in, at the top of the menu */
+  .menu .who {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 4px 12px;
+    color: #cfd3ea;
+    font-size: 0.9em;
+  }
+  .menu .who[hidden], .menu a[hidden] { display: none; }
+  .menu .who button {
+    flex: none;
+    padding: 4px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    background: none;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+  }
+  .menu .who button:hover { background: rgba(255, 255, 255, 0.12); }
 </style>
 
 <button class="burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="menu">
@@ -218,7 +240,9 @@
 </button>
 <nav class="menu" id="menu" aria-label="Games">
   <h2>Menu</h2>
+  <div class="who" id="who" hidden><span>👤 <b id="whoName"></b></span><button id="signOutBtn">Sign out</button></div>
   <a class="main" href="game.html">🎮 All games</a>
+  <a id="adminLink" href="admin.html" hidden>🛠️ Admin</a>
   <a href="games/racing.html">🏎️ Coin Rush Racing</a>
   <a href="games/space-dodge.html">🚀 Space Dodge</a>
   <a href="games/block-stack.html">🧱 Block Stack</a>
@@ -246,6 +270,8 @@
 
 <script src="boing.js"></script>
 <script src="games/save.js"></script>
+<script src="games/arcade-config.js"></script>
+<script src="games/accounts.js"></script>
 <script>
   const title = document.getElementById("title");
   const letters = title.textContent.split("");
@@ -320,6 +346,17 @@
   });
   addEventListener("click", e => {
     if (menu.classList.contains("open") && !menu.contains(e.target) && !burger.contains(e.target)) setMenu(false);
+  });
+
+  // Signed-in player's name, sign out, and the Admin link (only shown to the admin)
+  Arcade.onPlayer(p => {
+    document.getElementById("who").hidden = !p;
+    document.getElementById("whoName").textContent = p ? p.name : "";
+    document.getElementById("adminLink").hidden = !p?.isAdmin;
+  });
+  document.getElementById("signOutBtn").addEventListener("click", () => {
+    setMenu(false);
+    Arcade.signOut();
   });
 
   // Delete progress: two "are you sure?" yeses, then you must type Restart (capital R) exactly
