@@ -201,6 +201,19 @@ begin
   limit least(greatest(p_limit, 1), 100);
 end $$;
 
+-- The signed-in player's own all-time leaderboard score in every game (shown on the games menu)
+create or replace function public.my_scores(p_token text)
+returns table (game text, score bigint)
+language plpgsql stable security definer set search_path = '' as $$
+declare me public.players := public.session_player(p_token);
+begin
+  return query
+  select g.id, greatest(
+      coalesce((select max(s.score) from public.scores s where s.player = me.id and s.game = g.id), 0)
+    + coalesce((select sum(a.points) from public.adjustments a where a.player = me.id and a.game = g.id), 0), 0)::bigint
+  from public.games g;
+end $$;
+
 -- ---------- Admin tools ----------
 create or replace function public.session_admin(p_token text) returns public.players
 language plpgsql stable security definer set search_path = '' as $$
@@ -251,7 +264,7 @@ end $$;
 revoke execute on all functions in schema public from public, anon, authenticated;
 grant execute on function
   public.sign_up(text, text, text), public.sign_in(text, text, text), public.sign_out(text), public.whoami(text),
-  public.submit_score(text, text, int), public.leaderboard(text, text, text, int),
+  public.submit_score(text, text, int), public.leaderboard(text, text, text, int), public.my_scores(text),
   public.admin_players(text), public.admin_adjust_points(text, uuid, text, int, text),
   public.admin_reset_password(text, uuid, text)
   to anon, authenticated;

@@ -200,6 +200,18 @@
     return true;
   }
 
+  // The signed-in player's own all-time leaderboard score in each game: { snake: 42, ... },
+  // or null when signed out / not set up / the server can't be reached
+  async function myScores() {
+    if (!ready || !session) return null;
+    try {
+      const rows = await rpc("my_scores", { p_token: session.token });
+      return Object.fromEntries(rows.map(r => [r.game, Number(r.score)]));
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function signOut() {
     const token = session?.token;
     setSession(null);
@@ -230,6 +242,7 @@
     onPlayer(cb) { listeners.push(cb); cb(session?.player || null); },
     submitScore,
     leaderboard,
+    myScores,
     signOut,
     admin: Object.freeze(admin),
   }) });
