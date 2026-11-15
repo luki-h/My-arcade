@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Happy face: the icon shown in the browser tab -->
+  <circle cx="32" cy="32" r="29" fill="#ffcc00" stroke="#c98a00" stroke-width="4"/>
+  <ellipse cx="22" cy="25" rx="4.5" ry="6.5" fill="#3a2a10"/>
+  <ellipse cx="42" cy="25" rx="4.5" ry="6.5" fill="#3a2a10"/>
+  <path d="M16 37 Q32 54 48 37" fill="none" stroke="#3a2a10" stroke-width="5" stroke-linecap="round"/>
+</svg>
