@@ -1,0 +1,3 @@
+idea 1.a new clicker game where one player click the bill and you get a coin with the coins you can upgrade to +1 dollars per click, get a finger that clicks for you and you can upgrade it to click faster but at the start the finger clicks every 1.5 seconds and there are a lot more upgrades 
+idea 2. 
+idea 3.
