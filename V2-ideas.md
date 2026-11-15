@@ -1,3 +1,3 @@
 idea 1.a new clicker game where one player click the bill and you get a coin with the coins you can upgrade to +1 dollars per click, get a finger that clicks for you and you can upgrade it to click faster but at the start the finger clicks every 1.5 seconds and there are a lot more upgrades 
-idea 2. add a background to the all games screen
+idea 2. add weather to the tasty hamburger island game for good players if you don't want weather you can turn of the weather mode
 idea 3. add more upgrades to the racing game for players that need help if there not too good at the game
